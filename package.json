@@ -24,7 +24,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "eslint": "^10.13.0",
-    "eslint-plugin-jsdoc": "65.2.2",
+    "eslint-plugin-jsdoc": "65.4.0",
     "globals": "^17.13.0"
   }
 }
