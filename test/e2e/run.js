@@ -2,7 +2,7 @@
 /**
  * End-to-end check: loads the unpacked extension in Chromium, serves a mock
  * YouTube watch page plus a mock /api/timedtext endpoint, and verifies the
- * rendered dual subtitles and the in-player menu.
+ * rendered dual subtitles and the controls added to YouTube's settings popup.
  *
  * Usage: node test/e2e/run.js [screenshotDir]
  */
@@ -20,19 +20,20 @@ const CUES = {
   'en|asr|': [[0, 3000, 'hello everyone'], [3000, 3000, 'welcome back']],
   'en|asr|vi': [[0, 3000, 'xin chào mọi người'], [3000, 3000, 'chào mừng trở lại']],
   'en|asr|ja': [[0, 3000, 'みなさんこんにちは'], [3000, 3000, 'おかえりなさい']],
-  'fr||': [[0, 3000, 'bonjour à tous'], [3000, 3000, 'bon retour']]
+  'fr||': [[0, 3000, 'bonjour à tous'], [3000, 3000, 'bon retour']],
+  'fr||vi': [[0, 3000, 'xin chào tất cả'], [3000, 3000, 'mừng bạn quay lại']]
 };
 
 /** @type {string[]} */
 const requested = [];
 
 /**
- * Menu item whose label is exactly `label`.
+ * Settings popup item whose label is exactly `label`.
  * @param {import('playwright').Page} page
  * @param {string} label
  */
 function menuItem(page, label) {
-  return page.locator('.duosub-menu .ytp-menuitem')
+  return page.locator('.ytp-settings-menu .ytp-menuitem')
     .filter({ has: page.locator('.ytp-menuitem-label').getByText(label, { exact: true }) });
 }
 
@@ -98,33 +99,55 @@ async function main() {
     await page.waitForFunction(() => document.querySelector('.duosub-secondary')?.textContent === 'welcome back');
     assert.equal(await page.locator('.duosub-primary').textContent(), 'chào mừng trở lại');
 
-    // 4. In-player menu: choose French as secondary.
-    await page.locator('.duosub-button').click();
-    await page.locator('.duosub-menu').waitFor();
-    const mainLabels = await page.locator('.duosub-menu .ytp-menuitem-label').allTextContents();
-    assert.deepEqual(mainLabels, ['Phụ đề kép', 'Phụ đề chính', 'Phụ đề phụ', 'Cỡ chữ phụ đề phụ', 'Vị trí phụ đề phụ']);
-    assert.equal(await page.locator('.duosub-menu .ytp-menuitem').nth(1).locator('.ytp-menuitem-content').textContent(),
-      'English (auto-generated) >> Vietnamese');
+    // 4. Subtitles/CC panel: only a "Dual subtitles" switch is added, at the
+    //    top, and it comes back when YouTube rebuilds the panel.
+    await page.evaluate(() => window.showPanel('captions'));
+    const firstItem = page.locator('.ytp-settings-menu .ytp-panel-menu .ytp-menuitem').first();
+    await page.locator('.duosub-switch').waitFor();
+    assert.equal(await firstItem.locator('.ytp-menuitem-label').textContent(), 'Phụ đề kép');
+    assert.equal(await firstItem.getAttribute('aria-checked'), 'true');
+    assert.equal(await page.locator('.duosub-switch .ytp-menuitem-toggle-checkbox').count(), 1);
+    await page.evaluate(() => window.showPanel('captions'));
+    await page.locator('.duosub-switch').waitFor();
     if (SHOT_DIR) {await page.locator('#movie_player').screenshot({ path: path.join(SHOT_DIR, 'duosub-menu.png') });}
-    await menuItem(page, 'Phụ đề phụ').click();
-    if (SHOT_DIR) {await page.locator('#movie_player').screenshot({ path: path.join(SHOT_DIR, 'duosub-menu-secondary.png') });}
-    await menuItem(page, 'French').click();
+
+    // The switch turns dual subtitles off (YouTube's captions come back) and on.
+    await page.locator('.duosub-switch').click();
+    await page.waitForFunction(() => !document.querySelector('#movie_player').classList.contains('duosub-active'));
+    assert.equal(await page.locator('.duosub-switch').getAttribute('aria-checked'), 'false');
+    await page.locator('.duosub-switch').click();
+    await page.waitForFunction(() => document.querySelector('#movie_player').classList.contains('duosub-active'));
+
+    // 5. The secondary is learned from track switches: the track the user
+    //    switched away from becomes the secondary.
+    await page.evaluate(() => { window.mockTrack = { languageCode: 'fr', kind: '', vss_id: '.fr' }; });
+    await page.waitForFunction(() => document.querySelector('.duosub-primary')?.textContent === 'bon retour');
+    await page.waitForFunction(() => document.querySelector('.duosub-secondary')?.textContent === 'mừng bạn quay lại');
+    await page.evaluate(() => {
+      window.mockTrack = { languageCode: 'en', kind: 'asr', vss_id: 'a.en', translationLanguage: { languageCode: 'ja', languageName: 'Japanese' } };
+    });
+    await page.waitForFunction(() => document.querySelector('.duosub-primary')?.textContent === 'おかえりなさい');
     await page.waitForFunction(() => document.querySelector('.duosub-secondary')?.textContent === 'bon retour');
 
-    // 5. Primary switched through the menu uses YouTube's own API.
-    await menuItem(page, 'Phụ đề chính').click();
-    await menuItem(page, 'Tự động dịch').click();
-    await menuItem(page, 'Japanese').click();
-    const call = await page.evaluate(() => window.setOptionCalls.at(-1));
-    assert.equal(call.vss_id, 'a.en');
-    assert.equal(call.translationLanguage.languageCode, 'ja');
-    await page.waitForFunction(() => document.querySelector('.duosub-primary')?.textContent === 'おかえりなさい');
-
-    // 6. Secondary size and position.
+    // 6. Secondary size and position live in YouTube's caption Options panel,
+    //    after YouTube's own options.
+    await page.evaluate(() => window.showPanel('options'));
+    await page.locator('.duosub-option').first().waitFor();
+    const optionLabels = await page.locator('.ytp-settings-menu .ytp-panel-menu .ytp-menuitem-label').allTextContents();
+    assert.deepEqual(optionLabels, ['Phông chữ', 'Màu phông chữ', 'Cỡ phông chữ', 'Cỡ chữ phụ đề phụ', 'Vị trí phụ đề phụ', 'Đặt lại']);
     await menuItem(page, 'Cỡ chữ phụ đề phụ').click();
+    await page.locator('.duosub-panel').waitFor();
+    assert.equal(await page.locator('.ytp-panel.duosub-covered').count(), 1);
+    assert.equal(await page.locator('.duosub-panel .ytp-panel-title').textContent(), 'Cỡ chữ phụ đề phụ');
+    if (SHOT_DIR) {await page.locator('#movie_player').screenshot({ path: path.join(SHOT_DIR, 'duosub-menu-size.png') });}
     await menuItem(page, '60%').click();
+    await page.locator('.duosub-panel').waitFor({ state: 'detached' });
+    assert.equal(await page.locator('.ytp-panel.duosub-covered').count(), 0);
+    assert.equal(await menuItem(page, 'Cỡ chữ phụ đề phụ').locator('.ytp-menuitem-content').textContent(), '60%');
     await menuItem(page, 'Vị trí phụ đề phụ').click();
     await menuItem(page, 'Bên trên').click();
+    await page.locator('.duosub-panel').waitFor({ state: 'detached' });
+    assert.equal(await menuItem(page, 'Vị trí phụ đề phụ').locator('.ytp-menuitem-content').textContent(), 'Bên trên');
     await page.waitForFunction(() => parseFloat(getComputedStyle(document.querySelector('.duosub-secondary .duosub-segment')).fontSize) === 18);
     // Secondary rendered above the primary line.
     await page.waitForFunction(() => {
@@ -133,9 +156,15 @@ async function main() {
       return s.bottom <= p.top;
     });
 
+    // The picker's back button and closing the popup both drop the picker.
+    await menuItem(page, 'Cỡ chữ phụ đề phụ').click();
+    await page.locator('.duosub-panel .ytp-panel-back-button').click();
+    await page.locator('.duosub-panel').waitFor({ state: 'detached' });
+    await menuItem(page, 'Cỡ chữ phụ đề phụ').click();
+    await page.evaluate(() => window.closeSettings());
+    await page.waitForFunction(() => !document.querySelector('.duosub-panel') && !document.querySelector('.duosub-covered'));
+
     // 7. Settings persisted through the bridge into chrome.storage.
-    await page.keyboard.press('Escape');
-    assert.equal(await page.locator('.duosub-menu').count(), 0);
     const [worker] = context.serviceWorkers().length ? context.serviceWorkers() : [null];
     const extPage = await context.newPage();
     const extId = await (async () => {

@@ -8,7 +8,8 @@
  *  3. Render both lines in an overlay that copies the computed style of
  *     YouTube's own captions, so the user's caption settings (font, colour,
  *     background, edge, size) apply to both lines.
- *  4. Offer an in-player menu built from YouTube's own menu classes.
+ *  4. Add a "Secondary subtitles" picker to YouTube's own Subtitles/CC
+ *     settings panel. The primary subtitle is whatever track YouTube shows.
  *
  * Settings are validated and persisted by the isolated-world bridge
  * (src/bridge.js); the two worlds talk through window.postMessage. Nothing
@@ -36,9 +37,11 @@
   const MSG_FROM_BRIDGE = 'duosub-bridge';
   const SYNC_INTERVAL_MS = 300;
   const RETRY_DELAY_MS = 5000;
+  /** Back-off after HTTP 429; retrying sooner only keeps YouTube's limit in place. */
+  const RATE_LIMIT_DELAY_MS = 30000;
+  const RATE_LIMIT_MAX_DELAY_MS = 10 * 60 * 1000;
   const CUE_CACHE_LIMIT = 40;
   const SIZE_STEPS = [0.5, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9];
-  const SVG_NS = 'http://www.w3.org/2000/svg';
 
   /** The page's fetch, captured before any hook so our own requests are not observed. */
   const nativeFetch = window.fetch.bind(window);
@@ -49,38 +52,20 @@
 
   const STRINGS = Object.freeze({
     en: {
-      button: 'Dual subtitles',
       duo: 'Dual subtitles',
-      primary: 'Primary subtitles',
-      secondary: 'Secondary subtitles',
       size: 'Secondary font size',
       position: 'Secondary position',
       below: 'Below',
       above: 'Above',
-      auto: 'Auto',
-      off: 'Off',
-      autoTranslate: 'Auto-translate',
-      none: 'None',
-      back: 'Back',
-      ccOff: 'Turn on subtitles (CC) to choose tracks',
-      noTracks: 'This video has no subtitles'
+      back: 'Back to previous menu'
     },
     vi: {
-      button: 'Phụ đề kép',
       duo: 'Phụ đề kép',
-      primary: 'Phụ đề chính',
-      secondary: 'Phụ đề phụ',
       size: 'Cỡ chữ phụ đề phụ',
       position: 'Vị trí phụ đề phụ',
       below: 'Bên dưới',
       above: 'Bên trên',
-      auto: 'Tự động',
-      off: 'Tắt',
-      autoTranslate: 'Tự động dịch',
-      none: 'Không có',
-      back: 'Quay lại',
-      ccOff: 'Bật phụ đề (CC) để chọn phụ đề',
-      noTracks: 'Video này không có phụ đề'
+      back: 'Quay lại trình đơn trước'
     }
   });
 
@@ -97,10 +82,12 @@
    * @property {any}    ref      TrackRef or null.
    * @property {import('./core.js').Cue[] | null} cues Loaded cues, null while loading.
    * @property {number} retryAt  Earliest time a failed load may be retried.
+   * @property {number} failures Consecutive failed loads.
+   * @property {boolean} limited Last failure was YouTube's rate limit (HTTP 429).
    */
 
   /** @returns {TrackState} */
-  const emptyTrack = () => ({ key: '', ref: null, cues: null, retryAt: 0 });
+  const emptyTrack = () => ({ key: '', ref: null, cues: null, retryAt: 0, failures: 0, limited: false });
 
   const state = {
     /** Sanitised settings from the bridge; null until they arrive. @type {import('./settings.js').DuoSubSettings | null} */
@@ -118,7 +105,10 @@
     active: false,
     /** @type {HTMLVideoElement | null} */
     video: null,
-    syncQueued: false
+    syncQueued: false,
+    /** Last primary track seen, used to learn the secondary from track switches. @type {any} */
+    lastPrimary: null,
+    lastPrimaryVideo: ''
   };
 
   const ui = {
@@ -126,10 +116,11 @@
     /** @type {HTMLElement | null} */ overlay: null,
     /** @type {HTMLElement | null} */ primaryEl: null,
     /** @type {HTMLElement | null} */ secondaryEl: null,
-    /** @type {HTMLButtonElement | null} */ button: null,
-    /** @type {HTMLElement | null} */ menu: null,
-    /** Stack of panel builders for back navigation. @type {Array<() => HTMLElement>} */
-    panels: []
+    /** YouTube's settings popup being observed. @type {HTMLElement | null} */ observedMenu: null,
+    /** @type {MutationObserver | null} */ observer: null,
+    /** Choice list shown over a YouTube panel, while open. @type {HTMLElement | null} */ picker: null,
+    /** YouTube panel hidden behind the picker. @type {HTMLElement | null} */ covered: null,
+    /** data-duosub-option of the entry that opened the picker. */ pickerOrigin: ''
   };
 
   // ---------------------------------------------------------------------------
@@ -155,9 +146,13 @@
     const absolute = new URL(url, location.href).toString();
     if (state.captures.get(info.videoId) !== absolute) {
       state.captures.set(info.videoId, absolute);
-      // New session parameters: allow failed tracks to be retried right away.
-      state.primary.retryAt = 0;
-      state.secondary.retryAt = 0;
+      // New session parameters: allow failed tracks to be retried right away,
+      // unless YouTube is rate limiting them.
+      for (const slot of [state.primary, state.secondary]) {
+        if (!slot.limited) {
+          slot.retryAt = 0;
+        }
+      }
       queueSync();
     }
   }
@@ -339,33 +334,6 @@
   }
 
   /**
-   * Switches YouTube's own (primary) subtitle track.
-   * @param {any} player
-   * @param {{languageCode: string, kind: string, vssId: string}} track
-   * @param {import('./core.js').TranslationLanguage | null} translation
-   */
-  function setPrimaryTrack(player, track, translation) {
-    try {
-      let list = safeOption(player, 'tracklist', { includeAsr: true });
-      if (!Array.isArray(list) || !list.length) {
-        player.loadModule('captions');
-        list = safeOption(player, 'tracklist', { includeAsr: true }) || [];
-      }
-      const match = list.find((/** @type {any} */ t) => t.vss_id === track.vssId) ||
-        list.find((/** @type {any} */ t) => t.languageCode === track.languageCode && (t.kind || '') === track.kind);
-      const value = { ...(match || { languageCode: track.languageCode, kind: track.kind, vss_id: track.vssId }) };
-      if (translation) {
-        value.translationLanguage = { languageCode: translation.languageCode, languageName: translation.name };
-      } else {
-        delete value.translationLanguage;
-      }
-      player.setOption('captions', 'track', value);
-    } catch (err) {
-      console.warn('[Duo Sub] Could not change the primary subtitle:', err);
-    }
-  }
-
-  /**
    * Turns YouTube's captions on through its own button.
    * @param {any} player
    */
@@ -406,7 +374,7 @@
     const promise = nativeFetch(url, { credentials: 'include' })
       .then((res) => {
         if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
+          throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
         }
         return res.text();
       })
@@ -427,6 +395,25 @@
   }
 
   /**
+   * An auto-translation of an auto-generated track comes as whole sentences;
+   * reveal it with the rhythm of the source speech. The source track is
+   * usually the secondary already (same cache key), so this rarely costs a
+   * request. Without it the sentences show whole, as before.
+   * @param {string} videoId
+   * @param {any} ref
+   * @param {import('./core.js').CaptionTrack[]} tracks
+   * @param {import('./core.js').Cue[]} cues
+   * @returns {Promise<import('./core.js').Cue[]>}
+   */
+  function paceTranslation(videoId, ref, tracks, cues) {
+    if (!ref.tlang || ref.kind !== 'asr') {
+      return Promise.resolve(cues);
+    }
+    const source = { lang: ref.lang, kind: 'asr', vssId: ref.vssId || '' };
+    return loadCues(videoId, source, tracks).then((sourceCues) => Core.paceCues(cues, sourceCues), () => cues);
+  }
+
+  /**
    * Makes a track slot point at `ref`, loading its cues when it changes.
    * @param {'primary' | 'secondary'} slot
    * @param {string} videoId
@@ -441,24 +428,29 @@
       return;
     }
     if (key !== current.key) {
-      state[slot] = { key, ref, cues: null, retryAt: 0 };
+      state[slot] = { ...emptyTrack(), key, ref };
     }
     if (!ref) {
       state[slot].cues = [];
       return;
     }
     state[slot].retryAt = -1; // loading
-    loadCues(videoId, ref, tracks).then(
+    loadCues(videoId, ref, tracks).then((cues) => paceTranslation(videoId, ref, tracks, cues)).then(
       (cues) => {
         if (state[slot].key === key) {
-          state[slot].cues = cues;
-          state[slot].retryAt = 0;
+          Object.assign(state[slot], { cues, retryAt: 0, failures: 0, limited: false });
           queueSync();
         }
       },
       (err) => {
         if (state[slot].key === key) {
-          state[slot].retryAt = Date.now() + RETRY_DELAY_MS;
+          const track = state[slot];
+          track.failures += 1;
+          track.limited = Boolean(err && err.status === 429);
+          const delay = track.limited
+            ? Math.min(RATE_LIMIT_MAX_DELAY_MS, RATE_LIMIT_DELAY_MS * 2 ** (track.failures - 1))
+            : RETRY_DELAY_MS;
+          track.retryAt = Date.now() + delay;
           console.debug(`[Duo Sub] ${slot} subtitle not loaded:`, err && err.message);
         }
       }
@@ -694,6 +686,22 @@
     }, 0);
   }
 
+  /**
+   * When the user switches YouTube's subtitle track within a video, the track
+   * they switched away from becomes the secondary. The first track of each
+   * video is only a baseline: YouTube may have picked it on its own.
+   * @param {string} videoId
+   * @param {any} primaryRef
+   */
+  function learnSecondary(videoId, primaryRef) {
+    const choice = state.lastPrimaryVideo === videoId ? Core.inferSecondary(state.lastPrimary, primaryRef) : null;
+    state.lastPrimary = primaryRef;
+    state.lastPrimaryVideo = videoId;
+    if (choice && choice !== state.settings.secondary) {
+      saveSettings({ secondary: choice });
+    }
+  }
+
   /** Reconciles state with the player; runs periodically and on events. */
   function sync() {
     const player = getPlayer();
@@ -702,11 +710,10 @@
     }
     if (ui.player && ui.player !== player) {
       ui.player.classList.remove('duosub-active');
-      closeMenu();
     }
     ui.player = player;
     ensureOverlay(player);
-    ensureButton(player);
+    ensureSettingsObserver(player);
     state.video = player.querySelector('video');
 
     const videoId = getVideoId(player);
@@ -714,16 +721,15 @@
       state.videoId = videoId;
       state.primary = emptyTrack();
       state.secondary = emptyTrack();
-      closeMenu();
+      closePicker(false);
     }
 
     updateStyle(player);
     updateLayout(player);
-    if (ui.button) {
-      ui.button.setAttribute('aria-pressed', String(state.settings.enabled));
-    }
+    refreshSettingsPanels(player);
 
-    if (!state.settings.enabled || !videoId || player.classList.contains('ad-showing') || !captionsOn(player)) {
+    if (!state.settings.enabled || state.settings.secondary === 'off' || !videoId ||
+        player.classList.contains('ad-showing') || !captionsOn(player)) {
       setActive(player, false);
       return;
     }
@@ -736,6 +742,7 @@
       return;
     }
 
+    learnSecondary(videoId, primaryRef);
     const data = getCaptionData(player, videoId);
     applyTrack('primary', videoId, primaryRef, data.tracks);
     let secondaryRef = Core.resolveSecondary({
@@ -750,175 +757,373 @@
     }
     applyTrack('secondary', videoId, secondaryRef, data.tracks);
 
-    const ready = Boolean(state.primary.cues && state.primary.cues.length);
+    // Without a secondary line YouTube's own captions are shown instead, as
+    // they keep YouTube's positioning; the same applies while one is loading.
+    const ready = Boolean(secondaryRef && state.primary.cues && state.primary.cues.length &&
+      state.secondary.cues && state.secondary.cues.length);
     setActive(player, ready);
   }
 
   // ---------------------------------------------------------------------------
-  // In-player button and menu (YouTube's own menu markup and classes)
+  // Controls inside YouTube's own settings popup
+  //
+  // The Subtitles/CC panel gets a "Dual subtitles" switch; the caption Options
+  // panel gets the secondary font size and position. Everything reuses
+  // YouTube's ytp-panel / ytp-menuitem markup, so YouTube's CSS draws the
+  // switch, chevrons and check marks for both the classic and the newer UI.
   // ---------------------------------------------------------------------------
 
-  /** @returns {SVGSVGElement} Dual-caption icon in YouTube's 36x36 icon grid. */
-  function createIcon() {
-    const svg = document.createElementNS(SVG_NS, 'svg');
-    svg.setAttribute('viewBox', '0 0 36 36');
-    svg.setAttribute('width', '100%');
-    svg.setAttribute('height', '100%');
-    svg.setAttribute('aria-hidden', 'true');
-    const path = document.createElementNS(SVG_NS, 'path');
-    path.setAttribute('class', 'ytp-svg-fill');
-    path.setAttribute('fill', '#fff');
-    path.setAttribute('fill-rule', 'evenodd');
-    path.setAttribute('d',
-      'M11 9h14a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H11a4 4 0 0 1-4-4V13a4 4 0 0 1 4-4zm0 2a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V13a2 2 0 0 0-2-2z' +
-      'M11 14h14v3H11z' +
-      'M13.5 20h9v2h-9z');
-    svg.appendChild(path);
-    return svg;
+  /**
+   * YouTube's Subtitles/CC panel: the only settings panel whose header has an
+   * "Options" (caption style) button, which identifies it in every UI language.
+   * @param {HTMLElement} player
+   * @returns {HTMLElement | null}
+   */
+  function findCaptionsPanel(player) {
+    const options = player.querySelector('.ytp-settings-menu .ytp-panel .ytp-panel-options');
+    return options ? /** @type {HTMLElement | null} */ (options.closest('.ytp-panel')) : null;
   }
 
   /**
-   * Adds the Duo Sub button next to YouTube's subtitles button.
+   * YouTube's caption Options panel (font family, colour, size...).
+   * @param {HTMLElement} player
+   * @returns {HTMLElement | null}
+   */
+  function findOptionsPanel(player) {
+    const item = player.querySelector('.ytp-settings-menu .ytp-panel .ytp-subtitles-options-menu-item');
+    return item ? /** @type {HTMLElement | null} */ (item.closest('.ytp-panel')) : null;
+  }
+
+  /**
+   * Watches YouTube's settings popup, which rebuilds its panels whenever it is
+   * opened or navigated, so our entries can be put back right away.
    * @param {HTMLElement} player
    */
-  function ensureButton(player) {
-    if (ui.button && player.contains(ui.button)) {
+  function ensureSettingsObserver(player) {
+    const menu = player.querySelector('.ytp-settings-menu');
+    if (!menu || menu === ui.observedMenu) {
       return;
     }
-    const controls = player.querySelector('.ytp-right-controls');
-    if (!controls) {
+    if (ui.observer) {
+      ui.observer.disconnect();
+    }
+    closePicker(false);
+    ui.observedMenu = menu;
+    ui.observer = new MutationObserver(() => refreshSettingsPanels(player));
+    ui.observer.observe(menu, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
+  }
+
+  /**
+   * Adds or updates our entries in whichever settings panel is shown, and
+   * drops the picker once YouTube has moved on. Only touches the DOM when
+   * something changed, so the observer that calls it does not feed itself.
+   * @param {HTMLElement} player
+   */
+  function refreshSettingsPanels(player) {
+    if (!state.settings) {
       return;
     }
-    const button = /** @type {HTMLButtonElement} */ (el('button', 'ytp-button duosub-button'));
-    button.type = 'button';
-    button.setAttribute('aria-label', L.button);
-    button.setAttribute('aria-haspopup', 'true');
-    button.setAttribute('aria-expanded', 'false');
-    button.setAttribute('aria-pressed', String(state.settings.enabled));
-    button.title = L.button;
-    button.appendChild(createIcon());
-    button.addEventListener('click', (event) => {
-      event.stopPropagation();
-      if (ui.menu) {
-        closeMenu();
+    const menu = /** @type {HTMLElement | null} */ (player.querySelector('.ytp-settings-menu'));
+    const popupOpen = Boolean(menu && menu.style.display !== 'none');
+    if (ui.picker && (!popupOpen || !ui.covered || !ui.covered.isConnected)) {
+      closePicker(false);
+    }
+    const captions = findCaptionsPanel(player);
+    if (captions) {
+      refreshDuoSwitch(player, captions);
+    }
+    const options = findOptionsPanel(player);
+    if (options) {
+      refreshOptionItems(player, options);
+    }
+  }
+
+  /**
+   * The "Dual subtitles" switch at the top of the Subtitles/CC panel.
+   * @param {HTMLElement} player
+   * @param {HTMLElement} panel
+   */
+  function refreshDuoSwitch(player, panel) {
+    const list = panel.querySelector('.ytp-panel-menu');
+    if (!list) {
+      return;
+    }
+    let item = /** @type {HTMLElement | null} */ (list.querySelector('.duosub-switch'));
+    if (!item) {
+      item = menuItem({
+        label: L.duo,
+        role: 'menuitemcheckbox',
+        onSelect: () => {
+          const enabled = !state.settings.enabled;
+          // Switching on with the secondary set to 'off' (popup) would show nothing.
+          saveSettings(enabled && state.settings.secondary === 'off' ? { enabled, secondary: 'auto' } : { enabled });
+          if (enabled) {
+            ensureCaptionsOn(player);
+          }
+          refreshSettingsPanels(player);
+        }
+      });
+      item.classList.add('duosub-switch');
+      // YouTube's rows here are a single label cell. A second (content) cell
+      // would add a table column that every native row leaves empty, so the
+      // switch goes inside the label cell.
+      const content = /** @type {HTMLElement} */ (item.querySelector('.ytp-menuitem-content'));
+      content.remove();
+      const label = /** @type {HTMLElement} */ (item.querySelector('.ytp-menuitem-label'));
+      const row = el('div', 'duosub-switch-row');
+      row.append(el('span', '', L.duo), el('div', 'ytp-menuitem-toggle-checkbox'));
+      label.replaceChildren(row);
+      list.prepend(item);
+    }
+    const checked = String(state.settings.enabled);
+    if (item.getAttribute('aria-checked') !== checked) {
+      item.setAttribute('aria-checked', checked);
+    }
+    fitPanel(player, panel, item);
+  }
+
+  /**
+   * YouTube sizes its popup to fit its own rows, so an added row would push
+   * the last one (usually "Auto-translate") out of view. Grows the popup by
+   * that overflow, unless YouTube had already capped the popup and scrolls it.
+   * Reads YouTube's inline sizes, which are the targets of its resize
+   * transition, rather than the sizes mid-animation.
+   * @param {HTMLElement} player
+   * @param {HTMLElement} panel
+   * @param {HTMLElement} row The row we added.
+   */
+  function fitPanel(player, panel, row) {
+    const popup = /** @type {HTMLElement | null} */ (panel.closest('.ytp-settings-menu'));
+    const popupHeight = popup ? parseFloat(popup.style.height) : NaN;
+    if (!popup || !Number.isFinite(popupHeight)) {
+      return;
+    }
+    // YouTube may reset the popup's height alone after the panel was grown;
+    // the popup then clips the panel with no way to scroll. Match the panel to
+    // the popup first, so that at worst the panel scrolls.
+    if (parseFloat(panel.style.height) !== popupHeight) {
+      panel.style.height = `${popupHeight}px`;
+    }
+    const overflow = panel.scrollHeight - popupHeight;
+    if (overflow <= 0 || overflow > row.offsetHeight + 1) {
+      return;
+    }
+    // The popup is anchored at its bottom; keep a margin below the player top.
+    const room = popup.getBoundingClientRect().bottom - player.getBoundingClientRect().top - 12;
+    const height = popupHeight + Math.min(overflow, room - popupHeight);
+    if (height < popupHeight + 1) {
+      return;
+    }
+    // YouTube gives the popup and its panel the same height.
+    popup.style.height = `${height}px`;
+    panel.style.height = `${height}px`;
+  }
+
+  /**
+   * Secondary font size and position, after YouTube's own caption options
+   * (before "Reset").
+   * @param {HTMLElement} player
+   * @param {HTMLElement} panel
+   */
+  function refreshOptionItems(player, panel) {
+    const list = panel.querySelector('.ytp-panel-menu');
+    if (!list || ui.covered === panel) {
+      return;
+    }
+    if (!list.querySelector('.duosub-option')) {
+      const own = [...list.querySelectorAll('.ytp-subtitles-options-menu-item')];
+      const anchor = own[own.length - 1];
+      const items = [
+        optionItem(player, panel, 'size', L.size, sizeItems),
+        optionItem(player, panel, 'position', L.position, positionItems)
+      ];
+      if (anchor) {
+        anchor.after(...items);
       } else {
-        openMenu(player);
+        list.append(...items);
       }
-    });
-    const subtitles = controls.querySelector('.ytp-subtitles-button');
-    if (subtitles && subtitles.parentNode) {
-      subtitles.parentNode.insertBefore(button, subtitles.nextSibling);
-    } else {
-      controls.insertBefore(button, controls.firstChild);
     }
-    ui.button = button;
+    setOptionValue(list, 'size', `${Math.round(state.settings.sizeRatio * 100)}%`);
+    setOptionValue(list, 'position', state.settings.position === 'above' ? L.above : L.below);
+  }
+
+  /**
+   * @param {HTMLElement} player
+   * @param {HTMLElement} panel  Options panel the picker covers.
+   * @param {string} name
+   * @param {string} label
+   * @param {(player: HTMLElement) => HTMLElement[]} build Picker items.
+   * @returns {HTMLElement}
+   */
+  function optionItem(player, panel, name, label, build) {
+    const item = menuItem({
+      label,
+      submenu: true,
+      onSelect: () => openPicker(player, panel, label, build, name)
+    });
+    item.classList.add('duosub-option');
+    item.dataset.duosubOption = name;
+    // Same columns as YouTube's option rows, which start with an icon cell.
+    item.prepend(el('div', 'ytp-menuitem-icon'));
+    return item;
+  }
+
+  /**
+   * @param {Element} list
+   * @param {string} name
+   * @param {string} value
+   */
+  function setOptionValue(list, name, value) {
+    const content = list.querySelector(`.duosub-option[data-duosub-option="${name}"] .ytp-menuitem-content`);
+    if (content && content.textContent !== value) {
+      content.textContent = value;
+    }
   }
 
   /**
    * Builds a YouTube-style menu item.
    * @param {Object} opts
    * @param {string} opts.label
-   * @param {string} [opts.content]   Right-hand text (current value).
    * @param {'menuitem' | 'menuitemradio' | 'menuitemcheckbox'} [opts.role]
    * @param {boolean} [opts.checked]
-   * @param {boolean} [opts.toggle]   Render a toggle switch.
    * @param {boolean} [opts.submenu]  Opens another panel.
-   * @param {boolean} [opts.disabled]
-   * @param {() => void} [opts.onSelect]
+   * @param {() => void} opts.onSelect
    * @returns {HTMLElement}
    */
   function menuItem(opts) {
     const role = opts.role || 'menuitem';
     const item = el('div', 'ytp-menuitem');
     item.setAttribute('role', role);
-    item.tabIndex = opts.disabled ? -1 : 0;
-    if (opts.submenu) {
-      item.setAttribute('aria-haspopup', 'true');
-    }
+    item.tabIndex = 0;
     if (role !== 'menuitem') {
       item.setAttribute('aria-checked', String(Boolean(opts.checked)));
     }
-    if (opts.disabled) {
-      item.setAttribute('aria-disabled', 'true');
-      item.classList.add('duosub-disabled');
-    }
-    if (role === 'menuitemradio') {
-      item.append(el('div', 'ytp-menuitem-icon duosub-check'));
+    if (opts.submenu) {
+      // YouTube's CSS draws the chevron for aria-haspopup items.
+      item.setAttribute('aria-haspopup', 'true');
     }
     item.append(el('div', 'ytp-menuitem-label', opts.label));
-    const content = el('div', 'ytp-menuitem-content');
-    if (opts.toggle) {
-      content.append(el('div', 'ytp-menuitem-toggle-checkbox'));
-    } else if (opts.content !== undefined) {
-      content.textContent = opts.content;
+    if (role !== 'menuitemradio') {
+      item.append(el('div', 'ytp-menuitem-content'));
     }
-    item.append(content);
-    if (opts.submenu) {
-      item.classList.add('duosub-has-submenu');
-    }
-    const select = () => {
-      if (!opts.disabled && opts.onSelect) {
-        opts.onSelect();
-      }
-    };
-    item.addEventListener('click', select);
+    item.addEventListener('click', opts.onSelect);
     item.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
-        select();
+        event.stopPropagation();
+        opts.onSelect();
       }
     });
     return item;
   }
 
   /**
-   * Builds a panel, optionally with a back header.
-   * @param {string | null} title
-   * @param {HTMLElement[]} items
-   * @returns {HTMLElement}
+   * Shows a list of choices in place of a YouTube panel, with YouTube's panel
+   * header markup so it looks like one of its own sub-panels.
+   * @param {HTMLElement} player
+   * @param {HTMLElement} native Panel to cover; shown again on close.
+   * @param {string} title
+   * @param {(player: HTMLElement) => HTMLElement[]} build
+   * @param {string} origin data-duosub-option of the entry to refocus on close.
    */
-  function panel(title, items) {
-    const root = el('div', 'ytp-panel duosub-panel');
-    if (title !== null) {
-      const header = el('div', 'duosub-header');
-      const back = /** @type {HTMLButtonElement} */ (el('button', 'duosub-back'));
-      back.type = 'button';
-      back.setAttribute('aria-label', L.back);
-      back.append(el('span', 'duosub-back-arrow'), el('span', 'duosub-title', title));
-      back.addEventListener('click', popPanel);
-      header.append(back);
-      root.append(header);
-    }
-    const list = el('div', 'ytp-panel-menu');
-    list.setAttribute('role', 'menu');
-    list.append(...items);
-    root.append(list);
-    return root;
-  }
-
-  /** @param {() => HTMLElement} builder */
-  function pushPanel(builder) {
-    ui.panels.push(builder);
-    renderPanel();
-  }
-
-  function popPanel() {
-    if (ui.panels.length > 1) {
-      ui.panels.pop();
-    }
-    renderPanel();
-  }
-
-  function renderPanel() {
-    if (!ui.menu || !ui.panels.length) {
+  function openPicker(player, native, title, build, origin) {
+    const host = native.parentElement;
+    if (!host) {
       return;
     }
-    const build = ui.panels[ui.panels.length - 1];
-    ui.menu.replaceChildren(build());
-    const first = /** @type {HTMLElement | null} */ (ui.menu.querySelector('.duosub-back, .ytp-menuitem[aria-checked="true"], .ytp-menuitem'));
-    if (first) {
-      first.focus({ preventScroll: true });
+    closePicker(false);
+    const picker = el('div', 'ytp-panel duosub-panel');
+    picker.style.width = `${native.offsetWidth}px`;
+    picker.style.height = `${native.offsetHeight}px`;
+
+    const header = el('div', 'ytp-panel-header');
+    const backBox = el('div', 'ytp-panel-back-button-container');
+    const back = /** @type {HTMLButtonElement} */ (el('button', 'ytp-button ytp-panel-back-button'));
+    back.type = 'button';
+    back.setAttribute('aria-label', L.back);
+    back.addEventListener('click', () => closePickerSoon());
+    backBox.append(back);
+    const heading = el('span', 'ytp-panel-title', title);
+    heading.setAttribute('role', 'heading');
+    heading.setAttribute('aria-level', '2');
+    header.append(backBox, heading);
+
+    const list = el('div', 'ytp-panel-menu');
+    list.setAttribute('role', 'menu');
+    list.append(...build(player));
+    picker.append(header, list);
+
+    native.classList.add('duosub-covered');
+    host.append(picker);
+    ui.picker = picker;
+    ui.covered = native;
+    ui.pickerOrigin = origin;
+    const focus = /** @type {HTMLElement | null} */ (list.querySelector('[aria-checked="true"]') || list.firstElementChild);
+    if (focus) {
+      focus.focus({ preventScroll: true });
+      focus.scrollIntoView({ block: 'nearest' });
     }
+  }
+
+  /**
+   * Removes the picker and uncovers the YouTube panel behind it.
+   * @param {boolean} refocus Move focus back to the entry that opened it.
+   */
+  function closePicker(refocus) {
+    const covered = ui.covered;
+    if (ui.picker) {
+      ui.picker.remove();
+    }
+    ui.picker = null;
+    ui.covered = null;
+    if (covered) {
+      covered.classList.remove('duosub-covered');
+      const item = /** @type {HTMLElement | null} */ (covered.querySelector(`[data-duosub-option="${ui.pickerOrigin}"]`));
+      if (refocus && item) {
+        item.focus({ preventScroll: true });
+      }
+      if (ui.player) {
+        refreshSettingsPanels(ui.player);
+      }
+    }
+  }
+
+  /**
+   * Closes the picker once the current click has finished dispatching.
+   * YouTube closes its popup on clicks whose target is outside it, and a
+   * target already removed from the DOM counts as outside.
+   */
+  function closePickerSoon() {
+    setTimeout(() => closePicker(true), 0);
+  }
+
+  /**
+   * Saves a picker choice and returns to the panel behind the picker.
+   * @param {Partial<import('./settings.js').DuoSubSettings>} patch
+   */
+  function choose(patch) {
+    saveSettings(patch);
+    closePickerSoon();
+  }
+
+  /** @returns {HTMLElement[]} */
+  function sizeItems() {
+    return SIZE_STEPS.map((ratio) => menuItem({
+      label: `${Math.round(ratio * 100)}%`,
+      role: 'menuitemradio',
+      checked: Math.abs(state.settings.sizeRatio - ratio) < 0.001,
+      onSelect: () => choose({ sizeRatio: ratio })
+    }));
+  }
+
+  /** @returns {HTMLElement[]} */
+  function positionItems() {
+    return /** @type {const} */ (['below', 'above']).map((position) => menuItem({
+      label: position === 'above' ? L.above : L.below,
+      role: 'menuitemradio',
+      checked: state.settings.position === position,
+      onSelect: () => choose({ position })
+    }));
   }
 
   /**
@@ -931,273 +1136,6 @@
     window.postMessage({ source: MSG_FROM_PAGE, type: 'save', patch }, location.origin);
     state.styleKey = '';
     queueSync();
-  }
-
-  /**
-   * Readable label of a track reference.
-   * @param {any} ref
-   * @param {ReturnType<typeof getCaptionData>} data
-   * @returns {string}
-   */
-  function describeRef(ref, data) {
-    if (!ref) {
-      return L.none;
-    }
-    const track = data.tracks.find((t) => ref.vssId && t.vssId === ref.vssId) ||
-      data.tracks.find((t) => t.languageCode === ref.lang && t.kind === (ref.kind || ''));
-    const name = track ? track.name : ref.lang;
-    if (!ref.tlang) {
-      return name;
-    }
-    const target = data.translationLanguages.find((l) => l.languageCode === ref.tlang);
-    return `${name} >> ${target ? target.name : ref.tlang}`;
-  }
-
-  /** @param {HTMLElement} player */
-  function mainPanel(player) {
-    const videoId = getVideoId(player);
-    const data = getCaptionData(player, videoId);
-    const on = captionsOn(player);
-    const primaryRef = on ? getCurrentPrimary(player, videoId) : null;
-    const choice = state.settings.secondary;
-    const secondaryLabel = choice === 'auto'
-      ? `${L.auto}${state.secondary.ref && on ? ` (${describeRef(state.secondary.ref, data)})` : ''}`
-      : choice === 'off' ? L.off : secondaryChoiceLabel(choice, data);
-    const items = [
-      menuItem({
-        label: L.duo,
-        role: 'menuitemcheckbox',
-        toggle: true,
-        checked: state.settings.enabled,
-        onSelect: () => {
-          const enabled = !state.settings.enabled;
-          saveSettings({ enabled });
-          if (enabled) {
-            ensureCaptionsOn(player);
-          }
-          renderPanel();
-        }
-      }),
-      menuItem({
-        label: L.primary,
-        content: !data.tracks.length ? L.none : on ? describeRef(primaryRef, data) : L.off,
-        submenu: true,
-        disabled: !data.tracks.length,
-        onSelect: () => pushPanel(() => primaryPanel(player))
-      }),
-      menuItem({
-        label: L.secondary,
-        content: secondaryLabel,
-        submenu: true,
-        onSelect: () => pushPanel(() => secondaryPanel(player))
-      }),
-      menuItem({
-        label: L.size,
-        content: `${Math.round(state.settings.sizeRatio * 100)}%`,
-        submenu: true,
-        onSelect: () => pushPanel(sizePanel)
-      }),
-      menuItem({
-        label: L.position,
-        content: state.settings.position === 'above' ? L.above : L.below,
-        submenu: true,
-        onSelect: () => pushPanel(positionPanel)
-      })
-    ];
-    if (!data.tracks.length) {
-      items.push(el('div', 'duosub-note', L.noTracks));
-    } else if (!on) {
-      items.push(el('div', 'duosub-note', L.ccOff));
-    }
-    return panel(null, items);
-  }
-
-  /**
-   * Label of an explicit secondary choice ('en', 'en:asr').
-   * @param {string} choice
-   * @param {ReturnType<typeof getCaptionData>} data
-   */
-  function secondaryChoiceLabel(choice, data) {
-    const asr = choice.endsWith(':asr');
-    const code = asr ? choice.slice(0, -4) : choice;
-    const track = data.tracks.find((t) => t.languageCode === code && (t.kind === 'asr') === asr);
-    if (track) {
-      return track.name;
-    }
-    const lang = data.translationLanguages.find((l) => l.languageCode === code);
-    return lang ? lang.name : code;
-  }
-
-  /** @param {HTMLElement} player */
-  function primaryPanel(player) {
-    const videoId = getVideoId(player);
-    const data = getCaptionData(player, videoId);
-    const current = captionsOn(player) ? getCurrentPrimary(player, videoId) : null;
-    const items = data.tracks.map((track) => menuItem({
-      label: track.name,
-      role: 'menuitemradio',
-      checked: Boolean(current && !current.tlang &&
-        (current.vssId ? current.vssId === track.vssId : current.lang === track.languageCode && current.kind === track.kind)),
-      onSelect: () => {
-        setPrimaryTrack(player, track, null);
-        popPanel();
-      }
-    }));
-    if (data.translationLanguages.length) {
-      const target = current && current.tlang
-        ? data.translationLanguages.find((l) => l.languageCode === current.tlang)
-        : null;
-      items.push(menuItem({
-        label: L.autoTranslate,
-        content: target ? target.name : current && current.tlang ? current.tlang : '',
-        submenu: true,
-        onSelect: () => pushPanel(() => primaryTranslatePanel(player))
-      }));
-    }
-    return panel(L.primary, items);
-  }
-
-  /** @param {HTMLElement} player */
-  function primaryTranslatePanel(player) {
-    const videoId = getVideoId(player);
-    const data = getCaptionData(player, videoId);
-    const current = captionsOn(player) ? getCurrentPrimary(player, videoId) : null;
-    const source = (current && data.tracks.find((t) => current.vssId ? t.vssId === current.vssId : t.languageCode === current.lang)) ||
-      data.tracks.find((t) => t.isTranslatable) || data.tracks[0];
-    const items = data.translationLanguages.map((lang) => menuItem({
-      label: lang.name,
-      role: 'menuitemradio',
-      checked: Boolean(current && current.tlang === lang.languageCode),
-      onSelect: () => {
-        if (source) {
-          setPrimaryTrack(player, source, lang);
-        }
-        ui.panels.splice(1);
-        renderPanel();
-      }
-    }));
-    return panel(L.autoTranslate, items);
-  }
-
-  /** @param {HTMLElement} player */
-  function secondaryPanel(player) {
-    const data = getCaptionData(player, getVideoId(player));
-    const choice = state.settings.secondary;
-    const choose = (/** @type {string} */ value) => {
-      saveSettings({ secondary: value });
-      popPanel();
-    };
-    const items = [
-      menuItem({ label: L.auto, role: 'menuitemradio', checked: choice === 'auto', onSelect: () => choose('auto') }),
-      menuItem({ label: L.off, role: 'menuitemradio', checked: choice === 'off', onSelect: () => choose('off') }),
-      ...data.tracks.map((track) => {
-        const value = track.kind === 'asr' ? `${track.languageCode}:asr` : track.languageCode;
-        return menuItem({ label: track.name, role: 'menuitemradio', checked: choice === value, onSelect: () => choose(value) });
-      })
-    ];
-    if (data.translationLanguages.length) {
-      const translated = data.translationLanguages.find((l) => l.languageCode === choice);
-      items.push(menuItem({
-        label: L.autoTranslate,
-        content: translated && !data.tracks.some((t) => t.languageCode === choice) ? translated.name : '',
-        submenu: true,
-        onSelect: () => pushPanel(() => secondaryTranslatePanel(player))
-      }));
-    }
-    return panel(L.secondary, items);
-  }
-
-  /** @param {HTMLElement} player */
-  function secondaryTranslatePanel(player) {
-    const data = getCaptionData(player, getVideoId(player));
-    const items = data.translationLanguages.map((lang) => menuItem({
-      label: lang.name,
-      role: 'menuitemradio',
-      checked: state.settings.secondary === lang.languageCode,
-      onSelect: () => {
-        saveSettings({ secondary: lang.languageCode });
-        ui.panels.splice(1);
-        renderPanel();
-      }
-    }));
-    return panel(L.autoTranslate, items);
-  }
-
-  function sizePanel() {
-    return panel(L.size, SIZE_STEPS.map((ratio) => menuItem({
-      label: `${Math.round(ratio * 100)}%`,
-      role: 'menuitemradio',
-      checked: Math.abs(state.settings.sizeRatio - ratio) < 0.001,
-      onSelect: () => {
-        saveSettings({ sizeRatio: ratio });
-        popPanel();
-      }
-    })));
-  }
-
-  function positionPanel() {
-    return panel(L.position, /** @type {const} */ (['below', 'above']).map((position) => menuItem({
-      label: position === 'above' ? L.above : L.below,
-      role: 'menuitemradio',
-      checked: state.settings.position === position,
-      onSelect: () => {
-        saveSettings({ position });
-        popPanel();
-      }
-    })));
-  }
-
-  /** @param {MouseEvent} event */
-  function onDocumentClick(event) {
-    const target = /** @type {Node} */ (event.target);
-    if (ui.menu && !ui.menu.contains(target) && !(ui.button && ui.button.contains(target))) {
-      closeMenu();
-    }
-  }
-
-  /** @param {KeyboardEvent} event */
-  function onMenuKey(event) {
-    if (event.key === 'Escape') {
-      event.stopPropagation();
-      closeMenu();
-      if (ui.button) {
-        ui.button.focus();
-      }
-    }
-  }
-
-  /** @param {HTMLElement} player */
-  function openMenu(player) {
-    closeMenu();
-    const menu = el('div', 'ytp-popup ytp-settings-menu duosub-menu');
-    menu.setAttribute('role', 'dialog');
-    menu.setAttribute('aria-label', L.button);
-    // Keep clicks and keys inside the menu from reaching the player
-    // (play/pause, keyboard shortcuts).
-    for (const type of ['click', 'dblclick', 'mousedown', 'keydown']) {
-      menu.addEventListener(type, (event) => event.stopPropagation());
-    }
-    menu.addEventListener('keydown', onMenuKey, true);
-    player.appendChild(menu);
-    ui.menu = menu;
-    ui.panels = [() => mainPanel(player)];
-    renderPanel();
-    if (ui.button) {
-      ui.button.setAttribute('aria-expanded', 'true');
-    }
-    document.addEventListener('click', onDocumentClick, true);
-  }
-
-  function closeMenu() {
-    if (ui.menu) {
-      ui.menu.remove();
-      ui.menu = null;
-    }
-    ui.panels = [];
-    if (ui.button) {
-      ui.button.setAttribute('aria-expanded', 'false');
-    }
-    document.removeEventListener('click', onDocumentClick, true);
   }
 
   // ---------------------------------------------------------------------------
@@ -1214,9 +1152,6 @@
     }
     state.settings = data.settings;
     state.styleKey = '';
-    if (ui.menu) {
-      renderPanel();
-    }
     queueSync();
   });
 
