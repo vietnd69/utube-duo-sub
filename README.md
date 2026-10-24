@@ -5,12 +5,6 @@
 
 A Chrome extension that shows **dual subtitles** on YouTube: a primary line and a secondary line at the same time.
 
-![Dual subtitles](docs/overlay.png)
-
-![The Dual subtitles switch in YouTube's Subtitles/CC panel](docs/menu.png)
-
-![Secondary font size and position in YouTube's caption Options panel](docs/options.png)
-
 ## Features
 
 - **No extra buttons or menus: everything lives in YouTube's own Settings menu.**

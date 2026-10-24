@@ -44,4 +44,4 @@ How this project lines up with the ISO and related standards that apply to a sma
 ## Known gaps
 
 - The e2e test needs Playwright and Chromium, so CI does not run it yet; run `npm run test:e2e` before a release.
-- Binary files (`icons/*.png`, `docs/*.png`) and JSON files cannot carry SPDX comments; they are covered by the repository `LICENSE`.
+- Binary files (`icons/*.png`) and JSON files cannot carry SPDX comments; they are covered by the repository `LICENSE`.
