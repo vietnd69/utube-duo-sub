@@ -1,92 +1,109 @@
 # YouTube Duo Sub
 
-Chrome extension hiển thị **phụ đề kép (duo sub)** trên YouTube: một dòng phụ đề chính và một dòng phụ đề phụ, cùng lúc.
+[![CI](https://github.com/vietnd69/utube-duo-sub/actions/workflows/ci.yml/badge.svg)](https://github.com/vietnd69/utube-duo-sub/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-![Phụ đề kép](docs/overlay.png)
+A Chrome extension that shows **dual subtitles** on YouTube: a primary line and a secondary line at the same time.
 
-![Công tắc Phụ đề kép trong panel Phụ đề của YouTube](docs/menu.png)
+![Dual subtitles](docs/overlay.png)
 
-![Cỡ chữ và vị trí sub phụ trong panel Tùy chọn của YouTube](docs/options.png)
+![The Dual subtitles switch in YouTube's Subtitles/CC panel](docs/menu.png)
 
-## Tính năng
+![Secondary font size and position in YouTube's caption Options panel](docs/options.png)
 
-- **Không thêm nút hay menu riêng, mọi thứ nằm trong menu Cài đặt của YouTube.**
-  - *Cài đặt → Phụ đề*: dòng đầu tiên là công tắc **Phụ đề kép** (bật/tắt).
-  - *Cài đặt → Phụ đề → Tùy chọn*: thêm **Cỡ chữ phụ đề phụ** và **Vị trí phụ đề phụ**, ngay sau các tùy chọn của YouTube.
-- **Tự suy ra sub chính và sub phụ từ thao tác của người dùng.**
-  - Sub chính chính là phụ đề YouTube đang hiển thị, chọn như bình thường trong danh sách phụ đề của YouTube (kể cả *Tự động dịch*).
-  - Khi đổi phụ đề trong cùng một video, phụ đề vừa bỏ trở thành sub phụ. Ví dụ đang xem English rồi chọn Tiếng Việt thì English thành sub phụ. Lựa chọn này được nhớ cho các video sau. Phụ đề YouTube tự chọn khi mở video không được tính.
-  - Nếu sub phụ đã nhớ trùng ngôn ngữ với sub chính, extension dùng chế độ *Tự động* (bên dưới). Popup của extension vẫn cho chọn tay: *Tự động*, *Tắt*, hoặc một ngôn ngữ.
-- **Tự động dịch → sub phụ mặc định là ngôn ngữ gốc.** Khi sub chính là bản YouTube tự động dịch (ví dụ English → Tiếng Việt), chế độ *Tự động* hiển thị sub phụ là phụ đề gốc (English). Nếu sub chính không phải bản dịch, sub phụ sẽ là ngôn ngữ ưu tiên (mặc định là ngôn ngữ trình duyệt; nếu trùng với sub chính thì dùng tiếng Anh).
-- **Sub phụ nhỏ hơn sub chính.** Mặc định 75% cỡ chữ sub chính, chỉnh được từ 40% đến 95%. Sub phụ có thể đặt dưới hoặc trên sub chính.
-- **Dùng chung cấu hình UI sẵn có của YouTube.** Phông chữ, cỡ chữ, màu chữ, độ mờ, màu nền, màu cửa sổ và kiểu viền chữ được sao chép từ phụ đề gốc mà YouTube render. Vì vậy mọi thay đổi trong *Cài đặt → Phụ đề → Tùy chọn* của YouTube áp dụng cho cả hai dòng. Các mục thêm vào menu Cài đặt dùng chính markup của YouTube (`ytp-panel`, `ytp-panel-header`, `ytp-menuitem`…) nên CSS của YouTube vẽ chúng giống hệt mục gốc, ở cả giao diện cũ lẫn mới.
-- **Phụ đề auto-generated hiện từng từ theo lúc được nói**, dùng thời gian từng từ (`tOffsetMs`) của YouTube, kiểu cuộn 2 dòng như phụ đề gốc. Không còn hiện trước nguyên câu rồi nhảy cả cụm. Bản dịch tự động của phụ đề auto-generated chỉ có thời gian theo câu, nên các từ được rải theo nhịp giọng nói của track gốc và cũng hiện dần (ngôn ngữ viết liền không dấu cách như tiếng Trung, Nhật, Thái vẫn hiện cả câu).
-- Hỗ trợ điều hướng SPA của YouTube, chế độ toàn màn hình/rạp hát, video nhúng (`youtube-nocookie.com`). Khi không có sub phụ (tắt, chưa tải xong, hoặc tải lỗi), đang chạy quảng cáo hoặc tắt CC, extension để nguyên phụ đề gốc của YouTube.
-- Giao diện tiếng Việt và tiếng Anh.
+## Features
 
-## Cài đặt (chế độ nhà phát triển)
+- **No extra buttons or menus: everything lives in YouTube's own Settings menu.**
+  - *Settings → Subtitles/CC*: the first row is a **Dual subtitles** switch (on/off).
+  - *Settings → Subtitles/CC → Options*: adds **Secondary font size** and **Secondary position**, right after YouTube's own options.
+- **Primary and secondary tracks are inferred from what you do.**
+  - The primary track is whatever YouTube is showing. Pick it as usual from YouTube's subtitle list (including *Auto-translate*).
+  - When you switch tracks within a video, the track you just left becomes the secondary. For example, watching English and then picking Vietnamese makes English the secondary. This choice is remembered for later videos. Tracks YouTube picks on its own when a video opens do not count.
+  - If the remembered secondary is in the same language as the primary, the extension falls back to *Auto* mode (below). The extension popup still lets you choose by hand: *Auto*, *Off*, or a specific language.
+- **Auto-translate → the secondary defaults to the original language.** When the primary is a YouTube auto-translation (for example English → Vietnamese), *Auto* mode shows the original track (English) as the secondary. When the primary is not a translation, the secondary is your preferred language (the browser language by default, or English if that matches the primary).
+- **The secondary line is smaller than the primary.** 75% of the primary font size by default, adjustable from 40% to 95%. It can sit below or above the primary.
+- **Reuses YouTube's own caption styling.** Font family, size, colour, opacity, background colour, window colour and edge style are copied from the captions YouTube renders, so any change in YouTube's *Settings → Subtitles/CC → Options* applies to both lines. The items added to the Settings menu use YouTube's own markup (`ytp-panel`, `ytp-panel-header`, `ytp-menuitem`…), so YouTube's CSS draws them exactly like the built-in items, in both the old and new player UI.
+- **Auto-generated captions appear word by word as they are spoken**, using YouTube's per-word timing (`tOffsetMs`) and the same two-line roll-up as the native captions, instead of showing a whole sentence early and jumping by phrase. Auto-translations of auto-generated captions only have sentence-level timing, so their words are spread across the speech rhythm of the source track and also appear gradually (languages written without spaces, such as Chinese, Japanese and Thai, still show the whole sentence).
+- Works with YouTube's SPA navigation, fullscreen and theater mode, and embedded players (`youtube-nocookie.com`). When there is no secondary (turned off, still loading, or failed to load), during ads, or when CC is off, the extension leaves YouTube's native captions untouched.
+- English and Vietnamese UI.
 
-1. Tải mã nguồn: `git clone` repo này, hoặc giải nén file zip tạo bằng `npm run package`.
-2. Mở `chrome://extensions`, bật **Developer mode**.
-3. Bấm **Load unpacked** và chọn thư mục gốc của repo (thư mục chứa `manifest.json`).
-4. Mở một video YouTube có phụ đề và bật **CC**. Phụ đề kép sẽ xuất hiện. Bật/tắt trong *Cài đặt → Phụ đề*. Đổi sub phụ bằng cách chọn lần lượt hai phụ đề trong danh sách của YouTube.
+## Install (developer mode)
 
-Yêu cầu Chrome 111 trở lên (content script chạy trong `world: "MAIN"`).
+1. Get the source: `git clone` this repo, or unzip the archive built with `npm run package` (also attached to each [GitHub release](https://github.com/vietnd69/utube-duo-sub/releases)).
+2. Open `chrome://extensions` and turn on **Developer mode**.
+3. Click **Load unpacked** and select the repo root (the folder that contains `manifest.json`).
+4. Open a YouTube video that has subtitles and turn on **CC**. Dual subtitles appear. Toggle them in *Settings → Subtitles/CC*. Change the secondary by picking two tracks in turn from YouTube's list.
 
-## Cách hoạt động
+Requires Chrome 111 or later (the content script runs in `world: "MAIN"`).
+
+## How it works
 
 ```
 YouTube player ──(request /api/timedtext + pot token)──► src/page.js (MAIN world)
-                                                           │  ghi nhận URL phiên
-                                                           │  tải json3 cho sub chính + sub phụ
-                                                           │  render overlay, sao chép style phụ đề gốc
+                                                           │  records the session URL
+                                                           │  fetches json3 for primary + secondary
+                                                           │  renders the overlay, copies native caption style
                                                            ▼
 chrome.storage.sync ◄──► src/bridge.js (isolated world) ◄──postMessage──► page.js
         ▲
-        └── popup/popup.html (cài đặt)
+        └── popup/popup.html (settings)
 ```
 
-- YouTube bảo vệ API phụ đề bằng token *proof-of-origin* (`pot`) mà chỉ player tạo được. Extension không tự tạo token. Nó theo dõi request phụ đề do player gửi (hook `fetch`/`XMLHttpRequest`, dự phòng bằng Resource Timing) rồi dùng lại các tham số phiên đó để tải phụ đề khác cùng video. Vì vậy cần **bật CC** để extension hoạt động.
-- Phụ đề gốc của YouTube vẫn được render nhưng bị ẩn (`visibility: hidden`). Nhờ đó extension đọc được style đã tính toán (`getComputedStyle`) của phụ đề gốc. Trước khi phụ đề gốc xuất hiện, style được suy ra từ `player.getSubtitlesUserSettings()`.
-- Nếu không tải được phụ đề (ví dụ token hết hạn), extension để nguyên phụ đề gốc của YouTube và thử lại sau.
+- YouTube protects its caption API with a *proof-of-origin* (`pot`) token that only the player can create. The extension never creates tokens itself. It watches the caption requests the player sends (hooking `fetch`/`XMLHttpRequest`, with Resource Timing as a fallback) and reuses that session's parameters to fetch other tracks of the same video. That is why **CC must be on** for the extension to work.
+- YouTube's native captions are still rendered but hidden (`visibility: hidden`). This lets the extension read their computed style (`getComputedStyle`). Before native captions first appear, the style is derived from `player.getSubtitlesUserSettings()`.
+- If captions fail to load (for example, an expired token), the extension leaves YouTube's native captions in place and retries later.
 
-## Cấu trúc mã nguồn
+## Project layout
 
-| Tệp | Vai trò |
+| File | Purpose |
 | --- | --- |
 | `manifest.json` | Manifest V3 |
-| `src/core.js` | Logic thuần, không phụ thuộc DOM: parse json3, tìm cue theo thời gian, chọn sub phụ, dựng URL, ánh xạ style |
-| `src/settings.js` | Schema cài đặt + kiểm tra hợp lệ (`sanitizeSettings`, `sanitizePatch`) |
-| `src/page.js` | Script MAIN world: theo dõi request, tải phụ đề, overlay, các mục thêm vào menu Cài đặt của YouTube |
-| `src/bridge.js` | Script isolated world: đồng bộ cài đặt giữa `chrome.storage` và trang |
-| `src/duosub.css` | Style overlay |
-| `popup/` | Popup cài đặt |
-| `_locales/` | Chuỗi giao diện (en, vi) |
-| `test/core.test.js` | Unit test (`node:test`) |
-| `test/e2e/` | Test end-to-end: nạp extension vào Chromium với trang YouTube giả lập |
-| `tools/` | Tạo icon, đóng gói zip |
+| `src/core.js` | Pure, DOM-free logic: json3 parsing, cue lookup by time, secondary track selection, URL building, style mapping |
+| `src/settings.js` | Settings schema and validation (`sanitizeSettings`, `sanitizePatch`) |
+| `src/page.js` | MAIN-world script: request tracking, caption fetching, overlay, items added to YouTube's Settings menu |
+| `src/bridge.js` | Isolated-world script: syncs settings between `chrome.storage` and the page |
+| `src/duosub.css` | Overlay styles |
+| `popup/` | Settings popup |
+| `_locales/` | UI strings (en, vi) |
+| `test/core.test.js` | Unit tests (`node:test`) |
+| `test/e2e/` | End-to-end test: loads the extension into Chromium against a mock YouTube page |
+| `tools/` | Icon generation, zip packaging |
 
-## Tiêu chuẩn mã nguồn
+## Code standards
 
-Mã nguồn hướng theo các đặc tính chất lượng của **ISO/IEC 25010**:
+The code aims at the quality characteristics of **ISO/IEC 25010**:
 
-- **Dễ bảo trì:** tách logic thuần (`core.js`, `settings.js`) khỏi DOM, JSDoc cho mọi hàm, ESLint (`eslint:recommended`, `strict`, `eqeqeq`, `curly`, `no-var`…), `.editorconfig`.
-- **Tin cậy:** unit test + e2e test; mọi lỗi từ API nội bộ của YouTube đều được bắt và phương án dự phòng là phụ đề gốc.
-- **Bảo mật:** quyền tối thiểu (chỉ `storage`); không dùng `innerHTML` (tương thích Trusted Types của YouTube); mọi dữ liệu cài đặt đi qua `sanitizeSettings`/`sanitizePatch`; `postMessage` giới hạn theo `location.origin`.
-- Ngôn ngữ ECMAScript 2022 (ECMA-262, tương ứng ISO/IEC 22275), strict mode. Mã ngôn ngữ theo ISO 639 / BCP 47 (`en`, `vi`, `pt-BR`…).
+- **Maintainability:** pure logic (`core.js`, `settings.js`) kept apart from the DOM, JSDoc on every function, ESLint (`eslint:recommended`, `strict`, `eqeqeq`, `curly`, `no-var`…), `.editorconfig`.
+- **Reliability:** unit and e2e tests; every error from YouTube's internal APIs is caught, and the fallback is always the native captions.
+- **Security:** minimal permissions (`storage` only); no `innerHTML` (compatible with YouTube's Trusted Types); every settings value read from or written to storage goes through `sanitizeSettings`/`sanitizePatch`; `postMessage` is restricted to `location.origin`.
+- ECMAScript 2022 (ECMA-262, equivalent to ISO/IEC 22275), strict mode. Language codes follow ISO 639 / BCP 47 (`en`, `vi`, `pt-BR`…).
+- **Accessibility:** popup and menu items follow ISO/IEC 40500 (WCAG 2.0): labelled controls, ARIA roles and states, visible focus, sufficient contrast.
+- **Open source:** SPDX headers on every source file (ISO/IEC 5962); vulnerability disclosure and handling per ISO/IEC 29147 / 30111 ([SECURITY.md](SECURITY.md)).
 
-## Phát triển
+The full mapping, with evidence and known gaps, is in [docs/STANDARDS.md](docs/STANDARDS.md).
+
+## Development
 
 ```bash
 npm install          # ESLint
-npm run lint         # kiểm tra mã
-npm test             # unit test
-npm run test:e2e     # e2e (cần Playwright + Chromium)
-npm run package      # tạo dist/youtube-duo-sub-<version>.zip
-npm run icons        # tạo lại icon (Python + Pillow)
+npm run lint         # lint
+npm test             # unit tests
+npm run test:e2e     # e2e (needs Playwright + Chromium)
+npm run package      # build dist/youtube-duo-sub-<version>.zip
+npm run icons        # regenerate icons (Python + Pillow)
 ```
 
-## Giới hạn
+See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
-- Vị trí cửa sổ phụ đề kéo thả của YouTube và phụ đề có định vị đặc biệt (srv3) không được giữ nguyên; overlay luôn căn giữa phía dưới.
-- Extension dựa vào API nội bộ của player YouTube (`getOption('captions', …)`, `getPlayerResponse()`) và cấu trúc DOM của menu Cài đặt (`.ytp-panel-options`, `.ytp-subtitles-options-menu-item`), có thể thay đổi khi YouTube cập nhật.
+## Privacy
+
+The extension collects nothing and sends nothing anywhere. It only talks to YouTube, reusing the caption requests the player already makes, and stores its settings in `chrome.storage.sync`. See [PRIVACY.md](PRIVACY.md).
+
+## Limitations
+
+- YouTube's draggable caption window position and specially positioned captions (srv3) are not preserved; the overlay is always centred at the bottom.
+- The extension relies on internal YouTube player APIs (`getOption('captions', …)`, `getPlayerResponse()`) and on the DOM structure of the Settings menu (`.ytp-panel-options`, `.ytp-subtitles-options-menu-item`), which may change when YouTube updates.
+
+## License
+
+[MIT](LICENSE). Not affiliated with or endorsed by YouTube or Google.

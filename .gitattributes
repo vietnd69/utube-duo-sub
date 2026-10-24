@@ -1,0 +1,3 @@
+# Keep LF in the repository whatever core.autocrlf says (matches .editorconfig).
+* text=auto eol=lf
+*.png binary

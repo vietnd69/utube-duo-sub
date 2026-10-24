@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 vietnd69
+// SPDX-License-Identifier: MIT
 /**
  * @file Extension popup: edits the settings stored in chrome.storage.sync.
  * Open YouTube tabs pick the change up through the bridge immediately.
@@ -70,6 +72,7 @@
     select.value = value;
   }
 
+  /** Sets the document language and fills every [data-i18n] node from _locales. */
   function localize() {
     document.documentElement.lang = uiLanguage;
     for (const node of document.querySelectorAll('[data-i18n]')) {

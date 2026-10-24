@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 vietnd69
+// SPDX-License-Identifier: MIT
 /**
  * @file Pure logic for YouTube Duo Sub: timed-text parsing, track
  * resolution, URL building and caption style mapping.

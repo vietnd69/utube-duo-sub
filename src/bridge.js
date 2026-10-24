@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 vietnd69
+// SPDX-License-Identifier: MIT
 /**
  * @file Isolated-world content script: relays settings between
  * chrome.storage (only reachable here) and the page-world script.

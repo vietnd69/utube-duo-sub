@@ -1,0 +1,47 @@
+name: Bug report
+description: Subtitles missing, out of sync, wrong style, or the menu looks broken
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what did you see instead? Screenshots help.
+    validations:
+      required: true
+  - type: input
+    id: video
+    attributes:
+      label: Video link
+      description: A public video that shows the problem.
+      placeholder: https://www.youtube.com/watch?v=...
+    validations:
+      required: true
+  - type: input
+    id: tracks
+    attributes:
+      label: Primary and secondary tracks
+      placeholder: English (auto-generated) → Vietnamese (auto-translated)
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      options:
+        - youtube.com
+        - m.youtube.com
+        - Embedded player (youtube-nocookie.com or another site)
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Chrome and extension version
+      placeholder: Chrome 131, YouTube Duo Sub 1.0.0
+    validations:
+      required: true
+  - type: textarea
+    id: console
+    attributes:
+      label: Console errors
+      description: Any errors in DevTools → Console that mention duosub.
+      render: text

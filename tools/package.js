@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 vietnd69
+// SPDX-License-Identifier: MIT
 'use strict';
 /**
  * Builds dist/youtube-duo-sub-<version>.zip with only the files the

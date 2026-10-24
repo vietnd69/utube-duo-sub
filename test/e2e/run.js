@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 vietnd69
+// SPDX-License-Identifier: MIT
 'use strict';
 /**
  * End-to-end check: loads the unpacked extension in Chromium, serves a mock

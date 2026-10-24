@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 vietnd69
+# SPDX-License-Identifier: MIT
 """Generates the extension icons (icons/icon{16,32,48,128}.png).
 
 Usage: python3 tools/make_icons.py

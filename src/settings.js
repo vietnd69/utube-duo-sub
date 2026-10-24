@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 vietnd69
+// SPDX-License-Identifier: MIT
 /**
  * @file Shared settings schema for YouTube Duo Sub.
  *

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 vietnd69
+// SPDX-License-Identifier: MIT
 /**
  * @file Page-world (MAIN) script of YouTube Duo Sub.
  *
@@ -675,6 +677,7 @@
   // Main synchronisation loop
   // ---------------------------------------------------------------------------
 
+  /** Schedules one sync() on the next task, coalescing bursts of events. */
   function queueSync() {
     if (state.syncQueued) {
       return;
