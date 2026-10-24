@@ -21,14 +21,16 @@ A Chrome extension that shows **dual subtitles** on YouTube: a primary line and 
 - Works with YouTube's SPA navigation, fullscreen and theater mode, and embedded players (`youtube-nocookie.com`). When there is no secondary (turned off, still loading, or failed to load), during ads, or when CC is off, the extension leaves YouTube's native captions untouched.
 - English and Vietnamese UI.
 
-## Install (developer mode)
+## Install
 
-1. Get the source: `git clone` this repo, or unzip the archive built with `npm run package` (also attached to each [GitHub release](https://github.com/vietnd69/utube-duo-sub/releases)).
+1. Download `youtube-duo-sub-<version>.zip` from the [latest release](https://github.com/vietnd69/utube-duo-sub/releases/latest) and unzip it into a folder you will keep (Chrome loads the extension from there).
 2. Open `chrome://extensions` and turn on **Developer mode**.
-3. Click **Load unpacked** and select the repo root (the folder that contains `manifest.json`).
+3. Click **Load unpacked** and select the unzipped folder (the one that contains `manifest.json`).
 4. Open a YouTube video that has subtitles and turn on **CC**. Dual subtitles appear. Toggle them in *Settings → Subtitles/CC*. Change the secondary by picking two tracks in turn from YouTube's list.
 
 Requires Chrome 111 or later (the content script runs in `world: "MAIN"`).
+
+To update, download the new zip, replace the folder's contents, and click the reload icon on the extension's card in `chrome://extensions`. To run from source instead, `git clone` this repo and load the repo root.
 
 ## How it works
 
@@ -83,7 +85,7 @@ npm install          # ESLint
 npm run lint         # lint
 npm test             # unit tests
 npm run test:e2e     # e2e (needs Playwright + Chromium)
-npm run package      # build dist/youtube-duo-sub-<version>.zip
+npm run package      # build dist/youtube-duo-sub-<version>.zip (any OS, reproducible)
 npm run icons        # regenerate icons (Python + Pillow)
 ```
 

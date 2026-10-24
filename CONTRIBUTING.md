@@ -14,14 +14,14 @@ Open an issue with the **Bug report** template. YouTube changes its player often
 
 ## Development setup
 
-Requirements: Node.js 22 or later, Chrome 111 or later.
+Requirements: Node.js 22.2 or later, Chrome 111 or later.
 
 ```bash
 npm install
 npm run check        # lint + unit tests, same as CI
 ```
 
-Load the repo root as an unpacked extension (see [README](README.md#install-developer-mode)) and reload it in `chrome://extensions` after each change.
+Load the repo root as an unpacked extension (see [README](README.md#install)) and reload it in `chrome://extensions` after each change.
 
 The e2e test needs Playwright, which is not a dev dependency so that `npm install` stays small:
 
@@ -51,7 +51,7 @@ npm run test:e2e
 1. Bump `version` in both `manifest.json` and `package.json`.
 2. Move the `Unreleased` entries in `CHANGELOG.md` under the new version with today's date (`YYYY-MM-DD`).
 3. Run `npm run test:e2e` (CI does not run it).
-4. Commit, then tag and push: `git tag v1.2.3 && git push origin v1.2.3`.
-5. The **Release** workflow builds `youtube-duo-sub-<version>.zip` and attaches it to a GitHub release.
+4. Commit and push (or merge) to `main`.
+5. The **Release** workflow sees a version with no release yet, runs the checks, builds `youtube-duo-sub-<version>.zip`, creates the `v<version>` tag and publishes a GitHub release with the zip attached. Pushes that keep the same version do nothing.
 
 By contributing, you agree that your contributions are licensed under the [MIT License](LICENSE).
