@@ -14,6 +14,15 @@
    * @property {number} start Start time in milliseconds.
    * @property {number} end   End time in milliseconds (exclusive).
    * @property {string} text  Text, lines separated by '\n'.
+   * @property {CueWord[]} [words] Word timings of auto-generated (ASR)
+   *   captions, so words appear as they are spoken, like YouTube shows them.
+   */
+
+  /**
+   * A word of an auto-generated caption line.
+   * @typedef {Object} CueWord
+   * @property {number} t    Time the word is spoken, in milliseconds.
+   * @property {string} text Word including its leading space.
    */
 
   /**
@@ -51,6 +60,7 @@
    *
    * Events without segments are window/style definitions and are skipped,
    * as are events that only contain whitespace (ASR line-break markers).
+   * Auto-generated lines whose segments carry tOffsetMs keep per-word times.
    *
    * @param {unknown} data Parsed JSON body of a fmt=json3 response.
    * @returns {Cue[]}
@@ -75,7 +85,14 @@
       if (duration <= 0) {
         continue;
       }
-      cues.push({ start, end: start + duration, text: clean });
+      /** @type {Cue} */
+      const cue = { start, end: start + duration, text: clean };
+      if (ev.segs.some((s) => s && s.tOffsetMs !== undefined)) {
+        cue.words = ev.segs
+          .filter((s) => s && typeof s.utf8 === 'string' && s.utf8.trim())
+          .map((s) => ({ t: start + (Number(s.tOffsetMs) || 0), text: s.utf8.replace(/\r|\n/g, '') }));
+      }
+      cues.push(cue);
     }
     cues.sort((a, b) => a.start - b.start || a.end - b.end);
     return cues;
@@ -83,7 +100,8 @@
 
   /**
    * Returns the text visible at time `t`, joining overlapping cues the same
-   * way YouTube stacks roll-up (auto-generated) captions.
+   * way YouTube stacks roll-up (auto-generated) captions. Lines with word
+   * timings only show the words already spoken.
    *
    * @param {Cue[]} cues Sorted cues.
    * @param {number} t   Current time in milliseconds.
@@ -111,10 +129,89 @@
     // Overlaps are short-lived, so scanning a small window backwards is enough.
     for (let i = idx; i >= 0 && i > idx - 16 && active.length < MAX_ACTIVE_CUES; i--) {
       if (cues[i].end > t) {
-        active.unshift(cues[i].text);
+        const text = spokenText(cues[i], t);
+        if (text) {
+          active.unshift(text);
+        }
       }
     }
     return active.join('\n');
+  }
+
+  /**
+   * Gives auto-translated cues of an auto-generated track the rhythm of the
+   * original speech. YouTube translates whole sentences without word timings;
+   * each translated word is mapped to a source word spoken during the cue, so
+   * the translation is revealed as the speech goes, like the original line.
+   *
+   * Text without spaces (Chinese, Japanese, Thai...) has no words to spread
+   * and keeps showing whole.
+   *
+   * @param {Cue[]} cues   Translated cues.
+   * @param {Cue[]} source Cues of the source auto-generated track.
+   * @returns {Cue[]}
+   */
+  function paceCues(cues, source) {
+    const times = source.flatMap((c) => (c.words ? c.words.map((w) => w.t) : [])).sort((a, b) => a - b);
+    if (!times.length) {
+      return cues;
+    }
+    return cues.map((cue) => {
+      if (cue.words) {
+        return cue;
+      }
+      const spoken = times.slice(lowerBound(times, cue.start), lowerBound(times, cue.end));
+      const tokens = cue.text.match(/\S+\s*/g) || [];
+      if (spoken.length < 2 || tokens.length < 2) {
+        return cue;
+      }
+      const words = tokens.map((text, i) => ({
+        t: i === 0 ? cue.start : spoken[Math.floor((i * spoken.length) / tokens.length)],
+        text
+      }));
+      return { ...cue, words };
+    });
+  }
+
+  /**
+   * Index of the first element >= `value` in a sorted array.
+   * @param {number[]} sorted
+   * @param {number} value
+   * @returns {number}
+   */
+  function lowerBound(sorted, value) {
+    let lo = 0;
+    let hi = sorted.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (sorted[mid] < value) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    return lo;
+  }
+
+  /**
+   * Text of a cue at time `t`: all of it, or for word-timed lines the words
+   * spoken so far.
+   * @param {Cue} cue
+   * @param {number} t
+   * @returns {string}
+   */
+  function spokenText(cue, t) {
+    if (!cue.words) {
+      return cue.text;
+    }
+    let text = '';
+    for (const word of cue.words) {
+      if (word.t > t) {
+        break;
+      }
+      text += word.text;
+    }
+    return text.trim();
   }
 
   /**
@@ -312,7 +409,8 @@
    * - 'auto': when the primary is auto-translated, the original (source)
    *   language; otherwise the preferred language, or English if the
    *   preferred language is already the primary one.
-   * - '<code>' / '<code>:asr': that language (native track or translation).
+   * - '<code>' / '<code>:asr': that language (native track or translation),
+   *   or 'auto' when that language is the one the primary already shows.
    *
    * @param {Object} ctx
    * @param {CaptionTrack[]} ctx.tracks
@@ -327,7 +425,7 @@
     if (!primary || choice === 'off') {
       return null;
     }
-    if (choice !== 'auto') {
+    if (choice !== 'auto' && baseLang(choice.replace(/:asr$/, '')) !== baseLang(primary.tlang || primary.lang)) {
       return resolveLanguage(ctx, choice);
     }
     if (primary.tlang) {
@@ -343,6 +441,29 @@
       }
     }
     return null;
+  }
+
+  /**
+   * Secondary choice learned from a switch of the primary track: the track the
+   * user switched away from, so the two most recent picks are shown together.
+   *
+   * @param {TrackRef | null} prev Primary before the switch.
+   * @param {TrackRef | null} next Primary after the switch.
+   * @returns {string | null} Setting value ('en', 'en:asr', a translation
+   *   code), or null when nothing was learned (no previous track, or the same
+   *   language is still shown).
+   */
+  function inferSecondary(prev, next) {
+    if (!prev || !next) {
+      return null;
+    }
+    if (baseLang(prev.tlang || prev.lang) === baseLang(next.tlang || next.lang)) {
+      return null;
+    }
+    if (prev.tlang) {
+      return prev.tlang;
+    }
+    return prev.kind === 'asr' ? `${prev.lang}:asr` : prev.lang;
   }
 
   /**
@@ -440,12 +561,14 @@
   const api = Object.freeze({
     parseJson3,
     textAt,
+    paceCues,
     parseTimedtextUrl,
     buildTrackUrl,
     trackKey,
     baseLang,
     findTrack,
     resolveSecondary,
+    inferSecondary,
     styleFromUserSettings,
     toRgba
   });

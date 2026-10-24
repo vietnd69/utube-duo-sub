@@ -78,208 +78,40 @@
   box-decoration-break: clone;
 }
 
-/* --- Player button ------------------------------------------------------ */
-
-.duosub-button {
-  position: relative;
-}
-
-.duosub-button svg {
-  pointer-events: none;
-}
-
-.duosub-button[aria-pressed="true"]::after {
-  content: "";
-  position: absolute;
-  left: 25%;
-  right: 25%;
-  bottom: 22%;
-  height: 3px;
-  border-radius: 3px;
-  background: #f00;
-}
-
 /*
- * --- Menu ------------------------------------------------------------------
- * The menu uses YouTube's own popup/panel/menuitem classes so it inherits the
- * player theme. The rules below only fill in what YouTube sizes with inline
- * JavaScript for its own menus, plus a few Duo Sub specific parts.
+ * --- Controls in YouTube's settings popup ---------------------------------
+ * The "Dual subtitles" switch, the secondary size/position entries and their
+ * choice lists reuse YouTube's ytp-panel / ytp-panel-header / ytp-menuitem
+ * markup, so YouTube's own CSS draws them (switch, chevrons, check marks)
+ * in both the classic and the newer player UI. Nothing here restyles them.
  */
 
-.ytp-popup.duosub-menu {
-  position: absolute;
-  right: 12px;
-  bottom: 60px;
-  z-index: 72;
-  width: auto;
-  min-width: 260px;
-  max-width: min(360px, calc(100% - 24px));
-  max-height: calc(100% - 100px);
-  overflow: hidden;
-  display: flex;
-  border-radius: 12px;
-  background: rgba(28, 28, 28, 0.9);
-  color: #eee;
-  text-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
-  user-select: none;
+/* The YouTube panel stays in place (YouTube keeps managing it) while a
+   choice list is shown over it. */
+.ytp-panel.duosub-covered {
+  visibility: hidden;
 }
 
-.duosub-menu .duosub-panel {
-  position: static;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: auto;
-  max-height: 100%;
+/* "Dual subtitles" switch: one label cell like YouTube's own rows in the
+   Subtitles/CC panel, aligned with their text (after the check-mark gap). */
+.duosub-switch .ytp-menuitem-label {
+  padding-left: 35px;
+  padding-right: 20px;
 }
 
-.duosub-menu .ytp-panel-menu {
-  display: table;
-  width: 100%;
-  padding: 8px 0;
-  overflow-y: auto;
-  max-height: 100%;
+.ytp-big-mode .duosub-switch .ytp-menuitem-label {
+  padding-left: 52px;
+  padding-right: 35px;
 }
 
-.duosub-menu .duosub-panel > .ytp-panel-menu {
-  display: block;
-}
-
-.duosub-menu .ytp-menuitem {
+.duosub-switch-row {
   display: flex;
   align-items: center;
-  min-height: 40px;
-  padding: 0 15px;
-  cursor: pointer;
-  outline: none;
-  font-size: 13px;
-  font-weight: 500;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.duosub-menu .ytp-menuitem:hover,
-.duosub-menu .ytp-menuitem:focus-visible {
-  background-color: rgba(255, 255, 255, 0.1);
-}
-
-.duosub-menu .ytp-menuitem.duosub-disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-
-.duosub-menu .ytp-menuitem-label {
-  flex: 1 1 auto;
-  padding: 0 15px 0 0;
-  white-space: nowrap;
-}
-
-.duosub-menu .ytp-menuitem-content {
-  flex: 0 1 auto;
-  max-width: 170px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-align: right;
-  font-weight: 400;
-}
-
-.duosub-menu .duosub-has-submenu .ytp-menuitem-content::after {
-  content: "\203A";
-  display: inline-block;
-  margin-left: 8px;
-  font-size: 18px;
-  line-height: 1;
-  vertical-align: -1px;
-}
-
-.duosub-menu .duosub-check {
-  flex: 0 0 24px;
-  width: 24px;
-  height: 24px;
-  margin-right: 6px;
-  padding: 0;
-  background: none;
-}
-
-.duosub-menu .ytp-menuitem[aria-checked="true"] .duosub-check::before {
-  content: "\2713";
-  display: block;
-  font-size: 16px;
-  line-height: 24px;
-  text-align: center;
-}
-
-.duosub-menu .ytp-menuitem-toggle-checkbox {
-  position: relative;
-  width: 36px;
-  height: 14px;
-  margin-left: 8px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.3);
-  transition: background 0.08s cubic-bezier(0.4, 0, 1, 1);
-}
-
-.duosub-menu .ytp-menuitem-toggle-checkbox::after {
-  content: "";
-  position: absolute;
-  top: -3px;
-  left: 0;
-  width: 20px;
-  height: 20px;
-  border-radius: 20px;
-  background: #bdbdbd;
-  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.6);
-  transition: left 0.08s cubic-bezier(0.4, 0, 1, 1);
-}
-
-.duosub-menu .ytp-menuitem[aria-checked="true"] .ytp-menuitem-toggle-checkbox {
-  background: #f00;
-}
-
-.duosub-menu .ytp-menuitem[aria-checked="true"] .ytp-menuitem-toggle-checkbox::after {
-  left: 16px;
-  background: #fff;
-}
-
-.duosub-menu .duosub-header {
+.duosub-switch-row .ytp-menuitem-toggle-checkbox {
   flex: 0 0 auto;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.duosub-menu .duosub-back {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  min-height: 48px;
-  padding: 0 15px 0 8px;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  text-align: left;
-  cursor: pointer;
-}
-
-.duosub-menu .duosub-back:hover,
-.duosub-menu .duosub-back:focus-visible {
-  background-color: rgba(255, 255, 255, 0.1);
-  outline: none;
-}
-
-.duosub-menu .duosub-back-arrow::before {
-  content: "\2039";
-  display: inline-block;
-  width: 24px;
-  font-size: 22px;
-  line-height: 1;
-  text-align: center;
-}
-
-.duosub-menu .duosub-note {
-  padding: 8px 15px 4px;
-  font-size: 12px;
-  line-height: 1.4;
-  color: rgba(255, 255, 255, 0.7);
-  white-space: normal;
+  float: none;
 }

@@ -37,8 +37,66 @@ test('parseJson3 skips window events and whitespace-only segments', () => {
   });
   assert.deepEqual(cues, [
     { start: 500, end: 900, text: 'First' },
-    { start: 1000, end: 3000, text: 'Hello world' }
+    { start: 1000, end: 3000, text: 'Hello world', words: [{ t: 1000, text: 'Hello ' }, { t: 1300, text: 'world' }] }
   ]);
+});
+
+test('auto-generated lines reveal words as they are spoken', () => {
+  // Shape of a real ASR json3 track (kgrV3_g9rYY): roll-up lines with
+  // per-word tOffsetMs and "\n" append events between them.
+  const cues = core.parseJson3({
+    events: [
+      { tStartMs: 0, dDurationMs: 169879, id: 1, wpWinPosId: 1, wsWinStyleId: 1 },
+      { tStartMs: 4880, dDurationMs: 2840, wWinId: 1, segs: [{ utf8: 'a', acAsrConf: 0 }, { utf8: " palace's", tOffsetMs: 240 }] },
+      { tStartMs: 8270, wWinId: 1, aAppend: 1, segs: [{ utf8: '\n' }] },
+      { tStartMs: 8280, dDurationMs: 5880, wWinId: 1, segs: [
+        { utf8: 'cat' }, { utf8: ' he', tOffsetMs: 1000 }, { utf8: ' has', tOffsetMs: 1200 }, { utf8: ' the', tOffsetMs: 1439 }] },
+      { tStartMs: 11990, dDurationMs: 2170, wWinId: 1, aAppend: 1, segs: [{ utf8: '\n' }] },
+      { tStartMs: 12000, dDurationMs: 2160, wWinId: 1, segs: [{ utf8: 'densest' }, { utf8: ' fur', tOffsetMs: 600 }] }
+    ]
+  });
+  assert.equal(cues.length, 3);
+  assert.deepEqual(cues[1].words.map((w) => w.t), [8280, 9280, 9480, 9719]);
+  assert.equal(core.textAt(cues, 4900), 'a');
+  assert.equal(core.textAt(cues, 5200), "a palace's");
+  // A new line starts with only its first word, not the whole sentence.
+  assert.equal(core.textAt(cues, 8300), 'cat');
+  assert.equal(core.textAt(cues, 9300), 'cat he');
+  assert.equal(core.textAt(cues, 11000), 'cat he has the');
+  // Roll-up: the finished line stays above the one being spoken.
+  assert.equal(core.textAt(cues, 12100), 'cat he has the\ndensest');
+  assert.equal(core.textAt(cues, 12700), 'cat he has the\ndensest fur');
+  assert.equal(core.textAt(cues, 14200), '');
+});
+
+test('paceCues reveals a translated sentence with the rhythm of the source speech', () => {
+  const source = core.parseJson3({ events: [
+    { tStartMs: 8280, dDurationMs: 5880, segs: [
+      { utf8: 'cat' }, { utf8: ' he', tOffsetMs: 1000 }, { utf8: ' has', tOffsetMs: 1200 }, { utf8: ' the', tOffsetMs: 1439 },
+      { utf8: ' densest', tOffsetMs: 1720 }, { utf8: ' fur', tOffsetMs: 2319 }] }
+  ] });
+  // Shape of YouTube's auto-translation: one sentence, no word timings.
+  const translated = core.parseJson3({ events: [
+    { tStartMs: 9150, dDurationMs: 5130, segs: [{ utf8: 'có bộ lông dày nhất' }] },
+    { tStartMs: 20000, dDurationMs: 2000, segs: [{ utf8: 'không có giọng nói' }] }
+  ] });
+  const paced = core.paceCues(translated, source);
+  // Source words in [9150, 14280): 9280, 9480, 9719, 10000, 10599 -> 5 times for 5 tokens.
+  assert.deepEqual(paced[0].words.map((w) => w.t), [9150, 9480, 9719, 10000, 10599]);
+  assert.equal(core.textAt(paced, 9200), 'có');
+  assert.equal(core.textAt(paced, 9750), 'có bộ lông');
+  assert.equal(core.textAt(paced, 11000), 'có bộ lông dày nhất');
+  // No source speech during the cue: shown whole, as before.
+  assert.equal(paced[1].words, undefined);
+  assert.equal(core.textAt(paced, 20100), 'không có giọng nói');
+  // No word timings in the source at all: cues are returned unchanged.
+  assert.equal(core.paceCues(translated, translated), translated);
+});
+
+test('cues without word timings show their whole text at once', () => {
+  const cues = core.parseJson3({ events: [{ tStartMs: 0, dDurationMs: 2000, segs: [{ utf8: 'xin chào' }, { utf8: ' mọi người' }] }] });
+  assert.equal(cues[0].words, undefined);
+  assert.equal(core.textAt(cues, 10), 'xin chào mọi người');
 });
 
 test('parseJson3 tolerates malformed input', () => {
@@ -136,6 +194,33 @@ test('explicit secondary prefers native tracks, honours :asr and translates othe
   assert.deepEqual(core.resolveSecondary({ ...ctx, choice: 'pt' }), { lang: 'vi', kind: '', vssId: '.vi', tlang: 'pt-BR' });
   assert.equal(core.resolveSecondary({ ...ctx, choice: 'xx' }), null);
   assert.equal(core.resolveSecondary({ ...ctx, choice: 'off' }), null);
+});
+
+test('explicit secondary in the language already shown falls back to auto', () => {
+  const tracks = [track('en'), track('vi')];
+  const ctx = { tracks, translationLanguages: TRANSLATIONS, preferredLang: 'vi' };
+  // Learned 'en' on an earlier video, YouTube now shows English: use 'auto' (vi).
+  assert.deepEqual(core.resolveSecondary({ ...ctx, primary: { lang: 'en', kind: '', vssId: '.en' }, choice: 'en' }),
+    { lang: 'vi', kind: '', vssId: '.vi' });
+  // Same for an auto-translated primary: 'auto' gives the source language.
+  assert.deepEqual(core.resolveSecondary({ ...ctx, primary: { lang: 'en', kind: '', vssId: '.en', tlang: 'vi' }, choice: 'vi' }),
+    { lang: 'en', kind: '', vssId: '.en' });
+});
+
+test('inferSecondary learns the track the user switched away from', () => {
+  const en = { lang: 'en', kind: '' };
+  const enAsr = { lang: 'en', kind: 'asr' };
+  const vi = { lang: 'vi', kind: '' };
+  const enToJa = { lang: 'en', kind: '', tlang: 'ja' };
+  assert.equal(core.inferSecondary(en, vi), 'en');
+  assert.equal(core.inferSecondary(enAsr, vi), 'en:asr');
+  assert.equal(core.inferSecondary(enToJa, vi), 'ja');
+  assert.equal(core.inferSecondary(en, enToJa), 'en');
+  // Nothing learned: first track, or the same language still shown.
+  assert.equal(core.inferSecondary(null, vi), null);
+  assert.equal(core.inferSecondary(en, null), null);
+  assert.equal(core.inferSecondary(en, enAsr), null);
+  assert.equal(core.inferSecondary({ lang: 'pt-BR', kind: '' }, { lang: 'pt', kind: '' }), null);
 });
 
 test('translation uses a translatable track when the primary source is not', () => {

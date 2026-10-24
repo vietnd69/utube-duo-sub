@@ -4,17 +4,24 @@ Chrome extension hiển thị **phụ đề kép (duo sub)** trên YouTube: mộ
 
 ![Phụ đề kép](docs/overlay.png)
 
-![Menu Duo Sub trong player](docs/menu.png)
+![Công tắc Phụ đề kép trong panel Phụ đề của YouTube](docs/menu.png)
+
+![Cỡ chữ và vị trí sub phụ trong panel Tùy chọn của YouTube](docs/options.png)
 
 ## Tính năng
 
-- **Chọn sub chính và sub phụ.**
-  - Sub chính chính là phụ đề YouTube đang hiển thị. Chọn trong menu CC/Cài đặt của YouTube, hoặc trong nút **Duo Sub** trên thanh điều khiển của player (kể cả *Tự động dịch*).
-  - Sub phụ chọn trong nút **Duo Sub** hoặc popup của extension: *Tự động*, *Tắt*, một phụ đề có sẵn của video, hoặc một ngôn ngữ *Tự động dịch*.
+- **Không thêm nút hay menu riêng, mọi thứ nằm trong menu Cài đặt của YouTube.**
+  - *Cài đặt → Phụ đề*: dòng đầu tiên là công tắc **Phụ đề kép** (bật/tắt).
+  - *Cài đặt → Phụ đề → Tùy chọn*: thêm **Cỡ chữ phụ đề phụ** và **Vị trí phụ đề phụ**, ngay sau các tùy chọn của YouTube.
+- **Tự suy ra sub chính và sub phụ từ thao tác của người dùng.**
+  - Sub chính chính là phụ đề YouTube đang hiển thị, chọn như bình thường trong danh sách phụ đề của YouTube (kể cả *Tự động dịch*).
+  - Khi đổi phụ đề trong cùng một video, phụ đề vừa bỏ trở thành sub phụ. Ví dụ đang xem English rồi chọn Tiếng Việt thì English thành sub phụ. Lựa chọn này được nhớ cho các video sau. Phụ đề YouTube tự chọn khi mở video không được tính.
+  - Nếu sub phụ đã nhớ trùng ngôn ngữ với sub chính, extension dùng chế độ *Tự động* (bên dưới). Popup của extension vẫn cho chọn tay: *Tự động*, *Tắt*, hoặc một ngôn ngữ.
 - **Tự động dịch → sub phụ mặc định là ngôn ngữ gốc.** Khi sub chính là bản YouTube tự động dịch (ví dụ English → Tiếng Việt), chế độ *Tự động* hiển thị sub phụ là phụ đề gốc (English). Nếu sub chính không phải bản dịch, sub phụ sẽ là ngôn ngữ ưu tiên (mặc định là ngôn ngữ trình duyệt; nếu trùng với sub chính thì dùng tiếng Anh).
 - **Sub phụ nhỏ hơn sub chính.** Mặc định 75% cỡ chữ sub chính, chỉnh được từ 40% đến 95%. Sub phụ có thể đặt dưới hoặc trên sub chính.
-- **Dùng chung cấu hình UI sẵn có của YouTube.** Phông chữ, cỡ chữ, màu chữ, độ mờ, màu nền, màu cửa sổ và kiểu viền chữ được sao chép từ phụ đề gốc mà YouTube render. Vì vậy mọi thay đổi trong *Cài đặt → Phụ đề → Tùy chọn* của YouTube áp dụng cho cả hai dòng. Menu trong player dùng chính các class menu của YouTube (`ytp-popup`, `ytp-panel`, `ytp-menuitem`…) nên trông như menu gốc.
-- Hỗ trợ điều hướng SPA của YouTube, chế độ toàn màn hình/rạp hát, video nhúng (`youtube-nocookie.com`). Sub phụ tự ẩn khi đang chạy quảng cáo hoặc khi tắt CC.
+- **Dùng chung cấu hình UI sẵn có của YouTube.** Phông chữ, cỡ chữ, màu chữ, độ mờ, màu nền, màu cửa sổ và kiểu viền chữ được sao chép từ phụ đề gốc mà YouTube render. Vì vậy mọi thay đổi trong *Cài đặt → Phụ đề → Tùy chọn* của YouTube áp dụng cho cả hai dòng. Các mục thêm vào menu Cài đặt dùng chính markup của YouTube (`ytp-panel`, `ytp-panel-header`, `ytp-menuitem`…) nên CSS của YouTube vẽ chúng giống hệt mục gốc, ở cả giao diện cũ lẫn mới.
+- **Phụ đề auto-generated hiện từng từ theo lúc được nói**, dùng thời gian từng từ (`tOffsetMs`) của YouTube, kiểu cuộn 2 dòng như phụ đề gốc. Không còn hiện trước nguyên câu rồi nhảy cả cụm. Bản dịch tự động của phụ đề auto-generated chỉ có thời gian theo câu, nên các từ được rải theo nhịp giọng nói của track gốc và cũng hiện dần (ngôn ngữ viết liền không dấu cách như tiếng Trung, Nhật, Thái vẫn hiện cả câu).
+- Hỗ trợ điều hướng SPA của YouTube, chế độ toàn màn hình/rạp hát, video nhúng (`youtube-nocookie.com`). Khi không có sub phụ (tắt, chưa tải xong, hoặc tải lỗi), đang chạy quảng cáo hoặc tắt CC, extension để nguyên phụ đề gốc của YouTube.
 - Giao diện tiếng Việt và tiếng Anh.
 
 ## Cài đặt (chế độ nhà phát triển)
@@ -22,7 +29,7 @@ Chrome extension hiển thị **phụ đề kép (duo sub)** trên YouTube: mộ
 1. Tải mã nguồn: `git clone` repo này, hoặc giải nén file zip tạo bằng `npm run package`.
 2. Mở `chrome://extensions`, bật **Developer mode**.
 3. Bấm **Load unpacked** và chọn thư mục gốc của repo (thư mục chứa `manifest.json`).
-4. Mở một video YouTube có phụ đề và bật **CC**. Phụ đề kép sẽ xuất hiện. Bấm nút Duo Sub (bên cạnh nút CC) để đổi lựa chọn.
+4. Mở một video YouTube có phụ đề và bật **CC**. Phụ đề kép sẽ xuất hiện. Bật/tắt trong *Cài đặt → Phụ đề*. Đổi sub phụ bằng cách chọn lần lượt hai phụ đề trong danh sách của YouTube.
 
 Yêu cầu Chrome 111 trở lên (content script chạy trong `world: "MAIN"`).
 
@@ -50,9 +57,9 @@ chrome.storage.sync ◄──► src/bridge.js (isolated world) ◄──postMes
 | `manifest.json` | Manifest V3 |
 | `src/core.js` | Logic thuần, không phụ thuộc DOM: parse json3, tìm cue theo thời gian, chọn sub phụ, dựng URL, ánh xạ style |
 | `src/settings.js` | Schema cài đặt + kiểm tra hợp lệ (`sanitizeSettings`, `sanitizePatch`) |
-| `src/page.js` | Script MAIN world: theo dõi request, tải phụ đề, overlay, nút và menu trong player |
+| `src/page.js` | Script MAIN world: theo dõi request, tải phụ đề, overlay, các mục thêm vào menu Cài đặt của YouTube |
 | `src/bridge.js` | Script isolated world: đồng bộ cài đặt giữa `chrome.storage` và trang |
-| `src/duosub.css` | Style overlay và menu |
+| `src/duosub.css` | Style overlay |
 | `popup/` | Popup cài đặt |
 | `_locales/` | Chuỗi giao diện (en, vi) |
 | `test/core.test.js` | Unit test (`node:test`) |
@@ -81,6 +88,5 @@ npm run icons        # tạo lại icon (Python + Pillow)
 
 ## Giới hạn
 
-- Phụ đề dạng *cuộn* (auto-generated) hiện theo từng cụm câu thay vì từng từ như YouTube.
 - Vị trí cửa sổ phụ đề kéo thả của YouTube và phụ đề có định vị đặc biệt (srv3) không được giữ nguyên; overlay luôn căn giữa phía dưới.
-- Extension dựa vào API nội bộ của player YouTube (`getOption('captions', …)`, `getPlayerResponse()`), có thể thay đổi khi YouTube cập nhật.
+- Extension dựa vào API nội bộ của player YouTube (`getOption('captions', …)`, `getPlayerResponse()`) và cấu trúc DOM của menu Cài đặt (`.ytp-panel-options`, `.ytp-subtitles-options-menu-item`), có thể thay đổi khi YouTube cập nhật.
