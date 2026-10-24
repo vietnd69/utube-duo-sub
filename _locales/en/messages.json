@@ -12,5 +12,5 @@
   "popupPosition": { "message": "Secondary position" },
   "popupBelow": { "message": "Below primary" },
   "popupAbove": { "message": "Above primary" },
-  "popupFooter": { "message": "Choose the primary subtitle in YouTube's CC menu or the Duo Sub button in the player. Font, colours and background follow YouTube's caption settings." }
+  "popupFooter": { "message": "Turn dual subtitles on or off in YouTube's Settings → Subtitles/CC. Pick two tracks there in turn: the current one is the primary, the previous one the secondary. Font, colours and background follow YouTube's caption settings." }
 }

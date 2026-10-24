@@ -12,5 +12,5 @@
   "popupPosition": { "message": "Vị trí phụ đề phụ" },
   "popupBelow": { "message": "Dưới phụ đề chính" },
   "popupAbove": { "message": "Trên phụ đề chính" },
-  "popupFooter": { "message": "Chọn phụ đề chính trong menu CC của YouTube hoặc nút Duo Sub trên trình phát. Phông chữ, màu sắc và nền theo cài đặt phụ đề của YouTube." }
+  "popupFooter": { "message": "Bật/tắt phụ đề kép trong Cài đặt → Phụ đề của YouTube. Chọn lần lượt hai phụ đề ở đó: phụ đề đang chọn là phụ đề chính, phụ đề trước đó là phụ đề phụ. Phông chữ, màu sắc và nền theo cài đặt phụ đề của YouTube." }
 }
