@@ -1,0 +1,16 @@
+{
+  "extName": { "message": "YouTube Duo Sub" },
+  "extDescription": { "message": "Hiển thị hai phụ đề cùng lúc trên YouTube: chọn phụ đề chính và phụ đề phụ, dùng chung cấu hình phụ đề của YouTube." },
+  "popupEnabled": { "message": "Phụ đề kép" },
+  "popupSecondary": { "message": "Phụ đề phụ" },
+  "popupSecondaryHint": { "message": "Tự động: là ngôn ngữ gốc khi YouTube tự động dịch, nếu không thì dùng ngôn ngữ ưu tiên." },
+  "popupAuto": { "message": "Tự động" },
+  "popupOff": { "message": "Tắt" },
+  "popupPreferred": { "message": "Ngôn ngữ ưu tiên (Tự động)" },
+  "popupBrowserLang": { "message": "Ngôn ngữ trình duyệt" },
+  "popupSize": { "message": "Cỡ chữ phụ đề phụ" },
+  "popupPosition": { "message": "Vị trí phụ đề phụ" },
+  "popupBelow": { "message": "Dưới phụ đề chính" },
+  "popupAbove": { "message": "Trên phụ đề chính" },
+  "popupFooter": { "message": "Chọn phụ đề chính trong menu CC của YouTube hoặc nút Duo Sub trên trình phát. Phông chữ, màu sắc và nền theo cài đặt phụ đề của YouTube." }
+}

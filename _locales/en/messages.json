@@ -1,0 +1,16 @@
+{
+  "extName": { "message": "YouTube Duo Sub" },
+  "extDescription": { "message": "Show two subtitles at once on YouTube: pick a primary and a secondary track, styled with your YouTube caption settings." },
+  "popupEnabled": { "message": "Dual subtitles" },
+  "popupSecondary": { "message": "Secondary subtitles" },
+  "popupSecondaryHint": { "message": "Auto: the original language when YouTube auto-translates, otherwise your preferred language." },
+  "popupAuto": { "message": "Auto" },
+  "popupOff": { "message": "Off" },
+  "popupPreferred": { "message": "Preferred language (Auto)" },
+  "popupBrowserLang": { "message": "Browser language" },
+  "popupSize": { "message": "Secondary font size" },
+  "popupPosition": { "message": "Secondary position" },
+  "popupBelow": { "message": "Below primary" },
+  "popupAbove": { "message": "Above primary" },
+  "popupFooter": { "message": "Choose the primary subtitle in YouTube's CC menu or the Duo Sub button in the player. Font, colours and background follow YouTube's caption settings." }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "youtube-duo-sub",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chrome extension that shows dual subtitles on YouTube using YouTube's own caption style.",
+  "license": "MIT",
+  "scripts": {
+    "lint": "eslint .",
+    "test": "node --test test/*.test.js",
+    "test:e2e": "node test/e2e/run.js",
+    "icons": "python3 tools/make_icons.py",
+    "package": "node tools/package.js",
+    "check": "npm run lint && npm test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.13.0",
+    "globals": "^17.13.0"
+  }
+}

@@ -1,0 +1,285 @@
+/*
+ * YouTube Duo Sub styles.
+ *
+ * Caption colours, fonts and sizes come from CSS custom properties that
+ * page.js copies from YouTube's own rendered captions, so both lines follow
+ * the user's YouTube caption settings.
+ */
+
+/* Native captions stay laid out (their computed style is read) but hidden. */
+.html5-video-player.duosub-active .ytp-caption-window-container {
+  visibility: hidden !important;
+}
+
+.duosub-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 2%;
+  z-index: 40;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  transition: bottom 0.25s cubic-bezier(0, 0, 0.2, 1);
+}
+
+.duosub-overlay[hidden] {
+  display: none;
+}
+
+.duosub-window {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 90%;
+  padding: 0.1em 0.2em;
+  border-radius: 2px;
+  background: var(--duosub-window, transparent);
+  text-align: center;
+  font-family: var(--duosub-font-family, "YouTube Noto", Roboto, Arial, Helvetica, Verdana, sans-serif);
+  font-variant: var(--duosub-font-variant, normal);
+  font-weight: var(--duosub-font-weight, normal);
+  font-style: var(--duosub-font-style, normal);
+  color: var(--duosub-color, #fff);
+  text-shadow: var(--duosub-text-shadow, none);
+}
+
+.duosub-overlay[data-position="above"] .duosub-secondary {
+  order: -1;
+}
+
+.duosub-track[hidden] {
+  display: none;
+}
+
+.duosub-primary {
+  font-size: var(--duosub-primary-size, 20px);
+}
+
+.duosub-secondary {
+  font-size: var(--duosub-secondary-size, 15px);
+  margin-top: 0.15em;
+}
+
+.duosub-overlay[data-position="above"] .duosub-secondary {
+  margin-top: 0;
+  margin-bottom: 0.15em;
+}
+
+.duosub-line {
+  line-height: normal;
+}
+
+.duosub-segment {
+  white-space: pre-wrap;
+  padding: var(--duosub-padding, 0 0.25em);
+  background: var(--duosub-background, rgba(8, 8, 8, 0.75));
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+/* --- Player button ------------------------------------------------------ */
+
+.duosub-button {
+  position: relative;
+}
+
+.duosub-button svg {
+  pointer-events: none;
+}
+
+.duosub-button[aria-pressed="true"]::after {
+  content: "";
+  position: absolute;
+  left: 25%;
+  right: 25%;
+  bottom: 22%;
+  height: 3px;
+  border-radius: 3px;
+  background: #f00;
+}
+
+/*
+ * --- Menu ------------------------------------------------------------------
+ * The menu uses YouTube's own popup/panel/menuitem classes so it inherits the
+ * player theme. The rules below only fill in what YouTube sizes with inline
+ * JavaScript for its own menus, plus a few Duo Sub specific parts.
+ */
+
+.ytp-popup.duosub-menu {
+  position: absolute;
+  right: 12px;
+  bottom: 60px;
+  z-index: 72;
+  width: auto;
+  min-width: 260px;
+  max-width: min(360px, calc(100% - 24px));
+  max-height: calc(100% - 100px);
+  overflow: hidden;
+  display: flex;
+  border-radius: 12px;
+  background: rgba(28, 28, 28, 0.9);
+  color: #eee;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+  user-select: none;
+}
+
+.duosub-menu .duosub-panel {
+  position: static;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: auto;
+  max-height: 100%;
+}
+
+.duosub-menu .ytp-panel-menu {
+  display: table;
+  width: 100%;
+  padding: 8px 0;
+  overflow-y: auto;
+  max-height: 100%;
+}
+
+.duosub-menu .duosub-panel > .ytp-panel-menu {
+  display: block;
+}
+
+.duosub-menu .ytp-menuitem {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 15px;
+  cursor: pointer;
+  outline: none;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.duosub-menu .ytp-menuitem:hover,
+.duosub-menu .ytp-menuitem:focus-visible {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.duosub-menu .ytp-menuitem.duosub-disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.duosub-menu .ytp-menuitem-label {
+  flex: 1 1 auto;
+  padding: 0 15px 0 0;
+  white-space: nowrap;
+}
+
+.duosub-menu .ytp-menuitem-content {
+  flex: 0 1 auto;
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  font-weight: 400;
+}
+
+.duosub-menu .duosub-has-submenu .ytp-menuitem-content::after {
+  content: "\203A";
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 18px;
+  line-height: 1;
+  vertical-align: -1px;
+}
+
+.duosub-menu .duosub-check {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  margin-right: 6px;
+  padding: 0;
+  background: none;
+}
+
+.duosub-menu .ytp-menuitem[aria-checked="true"] .duosub-check::before {
+  content: "\2713";
+  display: block;
+  font-size: 16px;
+  line-height: 24px;
+  text-align: center;
+}
+
+.duosub-menu .ytp-menuitem-toggle-checkbox {
+  position: relative;
+  width: 36px;
+  height: 14px;
+  margin-left: 8px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.3);
+  transition: background 0.08s cubic-bezier(0.4, 0, 1, 1);
+}
+
+.duosub-menu .ytp-menuitem-toggle-checkbox::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 20px;
+  background: #bdbdbd;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.6);
+  transition: left 0.08s cubic-bezier(0.4, 0, 1, 1);
+}
+
+.duosub-menu .ytp-menuitem[aria-checked="true"] .ytp-menuitem-toggle-checkbox {
+  background: #f00;
+}
+
+.duosub-menu .ytp-menuitem[aria-checked="true"] .ytp-menuitem-toggle-checkbox::after {
+  left: 16px;
+  background: #fff;
+}
+
+.duosub-menu .duosub-header {
+  flex: 0 0 auto;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.duosub-menu .duosub-back {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 15px 0 8px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.duosub-menu .duosub-back:hover,
+.duosub-menu .duosub-back:focus-visible {
+  background-color: rgba(255, 255, 255, 0.1);
+  outline: none;
+}
+
+.duosub-menu .duosub-back-arrow::before {
+  content: "\2039";
+  display: inline-block;
+  width: 24px;
+  font-size: 22px;
+  line-height: 1;
+  text-align: center;
+}
+
+.duosub-menu .duosub-note {
+  padding: 8px 15px 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.7);
+  white-space: normal;
+}
