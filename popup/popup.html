@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>YouTube Duo Sub</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="popup">
+    <header class="popup-header">
+      <img src="../icons/icon32.png" alt="" width="24" height="24">
+      <h1 data-i18n="extName">YouTube Duo Sub</h1>
+    </header>
+
+    <label class="row switch-row">
+      <span data-i18n="popupEnabled">Dual subtitles</span>
+      <input type="checkbox" id="enabled" class="switch" role="switch">
+    </label>
+
+    <div class="field">
+      <label for="secondary" data-i18n="popupSecondary">Secondary subtitles</label>
+      <select id="secondary"></select>
+      <p class="hint" data-i18n="popupSecondaryHint"></p>
+    </div>
+
+    <div class="field">
+      <label for="preferredLang" data-i18n="popupPreferred">Preferred language (Auto)</label>
+      <select id="preferredLang"></select>
+    </div>
+
+    <div class="field">
+      <label for="sizeRatio"><span data-i18n="popupSize">Secondary font size</span> <output id="sizeValue" for="sizeRatio"></output></label>
+      <input type="range" id="sizeRatio" min="0.4" max="0.95" step="0.05">
+    </div>
+
+    <div class="field">
+      <label for="position" data-i18n="popupPosition">Secondary position</label>
+      <select id="position">
+        <option value="below" data-i18n="popupBelow">Below primary</option>
+        <option value="above" data-i18n="popupAbove">Above primary</option>
+      </select>
+    </div>
+
+    <p class="footer" data-i18n="popupFooter"></p>
+  </main>
+  <script src="../src/settings.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
