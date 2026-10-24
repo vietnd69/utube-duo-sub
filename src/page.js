@@ -774,14 +774,30 @@
   // ---------------------------------------------------------------------------
 
   /**
-   * YouTube's Subtitles/CC panel: the only settings panel whose header has an
-   * "Options" (caption style) button, which identifies it in every UI language.
+   * YouTube's Subtitles/CC panel: a settings panel with a header button
+   * ("Options") that lists this video's caption tracks. The header button
+   * alone is not enough: caption option sub-panels such as "Font size" have
+   * one too ("Video Override"). Track names come from the player in the UI
+   * language, so this works in every language.
    * @param {HTMLElement} player
    * @returns {HTMLElement | null}
    */
   function findCaptionsPanel(player) {
-    const options = player.querySelector('.ytp-settings-menu .ytp-panel .ytp-panel-options');
-    return options ? /** @type {HTMLElement | null} */ (options.closest('.ytp-panel')) : null;
+    const panels = [...player.querySelectorAll('.ytp-settings-menu .ytp-panel:not(.duosub-panel)')]
+      .filter((panel) => panel.querySelector('.ytp-panel-options'));
+    if (!panels.length) {
+      return null;
+    }
+    const names = new Set(getCaptionData(player, getVideoId(player)).tracks.map((t) => t.name));
+    const list = safeOption(player, 'tracklist', { includeAsr: true });
+    for (const track of Array.isArray(list) ? list : []) {
+      if (track && track.displayName) {
+        names.add(String(track.displayName));
+      }
+    }
+    const found = panels.find((panel) => [...panel.querySelectorAll('.ytp-menuitem-label')]
+      .some((label) => names.has((label.textContent || '').trim())));
+    return /** @type {HTMLElement | undefined} */ (found) || null;
   }
 
   /**

@@ -129,6 +129,11 @@ async function main() {
     await page.waitForFunction(() => document.querySelector('.duosub-primary')?.textContent === 'おかえりなさい');
     await page.waitForFunction(() => document.querySelector('.duosub-secondary')?.textContent === 'bon retour');
 
+    // Option sub-panels with a header button (e.g. Font size) get no switch.
+    await page.evaluate(() => window.showPanel('fontsize'));
+    await page.waitForTimeout(400);
+    assert.equal(await page.locator('.duosub-switch').count(), 0);
+
     // 6. Secondary size and position live in YouTube's caption Options panel,
     //    after YouTube's own options.
     await page.evaluate(() => window.showPanel('options'));

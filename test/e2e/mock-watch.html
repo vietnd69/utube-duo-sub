@@ -85,9 +85,18 @@
     panel.style.width = '300px';
     panel.style.height = '300px';
     const header = node('div', 'ytp-panel-header');
-    header.append(node('span', 'ytp-panel-title', kind === 'captions' ? 'Phụ đề' : 'Tùy chọn'));
+    header.append(node('span', 'ytp-panel-title', { captions: 'Phụ đề', options: 'Tùy chọn', fontsize: 'Cỡ phông chữ' }[kind]));
     const list = node('div', 'ytp-panel-menu');
-    if (kind === 'captions') {
+    if (kind === 'fontsize') {
+      // Caption option sub-panels also have a header button.
+      header.append(node('button', 'ytp-button ytp-panel-options', 'Ghi đè video'));
+      for (const label of ['50%', '75%', '100%']) {
+        const item = node('div', 'ytp-menuitem');
+        item.setAttribute('role', 'menuitemradio');
+        item.append(node('div', 'ytp-menuitem-label', label));
+        list.append(item);
+      }
+    } else if (kind === 'captions') {
       header.append(node('button', 'ytp-button ytp-panel-options', 'Tùy chọn'));
       for (const label of ['Tắt', 'English (auto-generated)', 'French', 'Tự động dịch']) {
         const item = node('div', 'ytp-menuitem');
